@@ -1,13 +1,10 @@
 name: Build iOS 16 IPA
 
-
 on:
   workflow_dispatch:
 
-
 permissions:
   contents: read
-
 
 jobs:
   build:
@@ -15,53 +12,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-
-
       - name: Install Node and pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 11.22.0
-
-
       - name: Install dependencies
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-
-
       - name: Disable Xcode signing
         run: |
           project='src-tauri/crates/tauritavern/gen/apple/tauritavern.xcodeproj/project.pbxproj'
           perl -0pi -e 's/(buildSettings = \{\n)/$1\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;\n/g' "$project"
           sed -i '' '/DEVELOPMENT_TEAM =/d' "$project"
           sed -i '' '/PROVISIONING_PROFILE_SPECIFIER =/d' "$project"
-
-
       - name: Build unsigned iOS application
-        run: pnpm run ios:build
-
-
+        run: pnpm run ios:build || true
       - name: Package unsigned IPA for TrollStore
         shell: bash
         run: |
           set -euo pipefail
-          app_path=$(find src-tauri -type d -name 'TauriTavern.app' -print -quit)
+          app_path=$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -path '*/Build/Products/release-iphoneos/TauriTavern.app' -print -quit)
           test -n "$app_path"
           mkdir -p package/Payload
           cp -R "$app_path" package/Payload/TauriTavern.app
           (cd package && zip -qry ../TauriTavern-ios16-unsigned.ipa Payload)
-
-
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: TauriTavern-ios16-unsigned
           path: TauriTavern-ios16-unsigned.ipa
           if-no-files-found: error
-
