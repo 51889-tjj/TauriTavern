@@ -1,0 +1,49 @@
+name: Build iOS 16 IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node and pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+
+      - name: Install dependencies
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build unsigned iOS application
+        run: pnpm run ios:build -- --no-sign
+
+      - name: Package unsigned IPA for TrollStore
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path=$(find src-tauri -type d -path '*Build/Products/release-iphoneos/TauriTavern.app' -print -quit)
+          test -n "$app_path"
+          mkdir -p package/Payload
+          cp -R "$app_path" package/Payload/TauriTavern.app
+          (cd package && zip -qry ../TauriTavern-ios16-unsigned.ipa Payload)
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: TauriTavern-ios16-unsigned
+          path: TauriTavern-ios16-unsigned.ipa
+          if-no-files-found: error
