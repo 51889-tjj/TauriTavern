@@ -1,10 +1,13 @@
 name: Build iOS 16 IPA
 
+
 on:
   workflow_dispatch:
 
+
 permissions:
   contents: read
+
 
 jobs:
   build:
@@ -13,13 +16,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
 
       - name: Install Node and pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 11.22.0
+
 
       - name: Install dependencies
         uses: actions/setup-node@v4
@@ -28,6 +34,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+
       - name: Disable Xcode signing
         run: |
           project='src-tauri/crates/tauritavern/gen/apple/tauritavern.xcodeproj/project.pbxproj'
@@ -35,8 +42,10 @@ jobs:
           sed -i '' '/DEVELOPMENT_TEAM =/d' "$project"
           sed -i '' '/PROVISIONING_PROFILE_SPECIFIER =/d' "$project"
 
+
       - name: Build unsigned iOS application
-        run: pnpm run ios:build -- --no-sign
+        run: pnpm run ios:build
+
 
       - name: Package unsigned IPA for TrollStore
         shell: bash
@@ -48,9 +57,11 @@ jobs:
           cp -R "$app_path" package/Payload/TauriTavern.app
           (cd package && zip -qry ../TauriTavern-ios16-unsigned.ipa Payload)
 
+
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: TauriTavern-ios16-unsigned
           path: TauriTavern-ios16-unsigned.ipa
           if-no-files-found: error
+
