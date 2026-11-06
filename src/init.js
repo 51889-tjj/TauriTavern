@@ -2,6 +2,65 @@
 
 window.__TAURI_RUNNING__ = true;
 
+// iOS 16.0 ships an older WebKit than the later iOS 16 releases.  The
+// application is emitted as ES2020, but a few built-ins used by the upstream
+// frontend are newer than that syntax target.  Install the small, semantics-
+// preserving compatibility methods before any application module is imported;
+// otherwise an early module evaluation error leaves WKWebView showing only
+// the native black background.
+function installWebKitCompatibility() {
+    if (!Array.prototype.findLast) {
+        Object.defineProperty(Array.prototype, 'findLast', {
+            configurable: true,
+            value(callback, thisArg) {
+                for (let index = this.length - 1; index >= 0; index -= 1) {
+                    if (callback.call(thisArg, this[index], index, this)) return this[index];
+                }
+                return undefined;
+            },
+        });
+    }
+
+    if (!Array.prototype.findLastIndex) {
+        Object.defineProperty(Array.prototype, 'findLastIndex', {
+            configurable: true,
+            value(callback, thisArg) {
+                for (let index = this.length - 1; index >= 0; index -= 1) {
+                    if (callback.call(thisArg, this[index], index, this)) return index;
+                }
+                return -1;
+            },
+        });
+    }
+
+    if (!Array.prototype.toSorted) {
+        Object.defineProperty(Array.prototype, 'toSorted', {
+            configurable: true,
+            value(compareFn) { return Array.from(this).sort(compareFn); },
+        });
+    }
+
+    if (!Array.prototype.toReversed) {
+        Object.defineProperty(Array.prototype, 'toReversed', {
+            configurable: true,
+            value() { return Array.from(this).reverse(); },
+        });
+    }
+
+    if (!Array.prototype.toSpliced) {
+        Object.defineProperty(Array.prototype, 'toSpliced', {
+            configurable: true,
+            value(...args) {
+                const copy = Array.from(this);
+                copy.splice(...args);
+                return copy;
+            },
+        });
+    }
+}
+
+installWebKitCompatibility();
+
 // In some WebKit builds, `location.href` may omit the trailing slash for origin-only
 // URLs (e.g. `tauri://localhost`). jQuery UI Tabs uses `anchor.href` vs
 // `location.href` (sans hash) to decide whether a tab is local; the mismatch can
