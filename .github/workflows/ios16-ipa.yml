@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,27 +28,21 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Prepare iOS project
-        run: pnpm run ios:build -- --no-sign || true
+      - name: Disable Xcode signing
+        run: |
+          project='src-tauri/crates/tauritavern/gen/apple/tauritavern.xcodeproj/project.pbxproj'
+          perl -0pi -e 's/(buildSettings = \{\n)/$1\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;\n/g' "$project"
+          sed -i '' '/DEVELOPMENT_TEAM =/d' "$project"
+          sed -i '' '/PROVISIONING_PROFILE_SPECIFIER =/d' "$project"
 
       - name: Build unsigned iOS application
-        run: |
-          xcodebuild \
-            -project src-tauri/crates/tauritavern/gen/apple/tauritavern.xcodeproj \
-            -scheme tauritavern_iOS \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath "$RUNNER_TEMP/tauri-derived" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            DEVELOPMENT_TEAM= \
-            build
+        run: pnpm run ios:build -- --no-sign
 
       - name: Package unsigned IPA for TrollStore
         shell: bash
         run: |
           set -euo pipefail
-          app_path=$(find "$RUNNER_TEMP/tauri-derived" -type d -name 'TauriTavern.app' -print -quit)
+          app_path=$(find src-tauri -type d -name 'TauriTavern.app' -print -quit)
           test -n "$app_path"
           mkdir -p package/Payload
           cp -R "$app_path" package/Payload/TauriTavern.app
