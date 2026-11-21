@@ -40,7 +40,7 @@ workflows:
             ./scripts/ci/configure-mobile-http.sh disable ios
           }
           trap restore_mobile_config EXIT
-          npx --yes pnpm@11.22.0 run ios:build -- --ci --no-sign
+          node scripts/tauri-app.mjs --prepare-frontend ios build --ci --no-sign
       - name: Stage IPA artifact
         script: |
           set -euo pipefail
