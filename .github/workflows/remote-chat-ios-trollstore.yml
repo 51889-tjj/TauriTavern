@@ -42,7 +42,7 @@ jobs:
         run: ./scripts/ci/configure-mobile-http.sh enable ios
 
       - name: Build unsigned iOS IPA
-        run: pnpm run ios:build -- --no-sign
+        run: node scripts/tauri-app.mjs --prepare-frontend ios build --ci --no-sign
 
       - name: Restore repository transport configuration
         if: always()
