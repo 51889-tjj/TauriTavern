@@ -38,6 +38,7 @@ pub mod preset_commands;
 pub mod provider_metadata_commands;
 pub mod quick_reply_commands;
 pub mod registry;
+pub mod remote_chat_commands;
 pub mod resource_bridge_commands;
 #[cfg(desktop)]
 pub mod runtime_paths_commands;

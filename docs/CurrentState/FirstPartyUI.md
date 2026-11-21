@@ -9,6 +9,7 @@ First-party UI 包含：
 - Agent System；
 - In-App Assistant；
 - MCP Manager；
+- Remote Chat；
 - Tauri Settings、Dev Logs 与 Sync。
 
 这些界面统一使用 React、React DOM 与 strict TypeScript/TSX。上游 SillyTavern 前端、第三方扩展和由 WebView 直接加载的宿主脚本不属于 React 组件源码。
@@ -29,6 +30,7 @@ Rust / Host services
 - React 组件负责渲染、未保存草稿和当前视图状态，不复制持久事实，也不直接调用 Tauri `invoke()`。
 - 页面级事件必须使用 `window.SillyTavern.getContext()` 提供的 `eventSource` 与 `eventTypes`；订阅和退订使用同一个页面实例。
 - 缺少必需 Host API、事件或 DTO 字段时立即失败并暴露上下文，不猜测默认能力。
+- Remote Chat 的 paired-device HTTPS client 和本机聊天生成所有权分别由 Rust Host 与 SillyTavern frontend 持有；React island 只通过 typed `api.remoteChat` actions 操作。
 
 ## 3. 源码与构建边界
 
@@ -38,6 +40,7 @@ Rspack 直接拥有以下 TypeScript/TSX 源码：
 src/scripts/extensions/agent-system/src
 src/scripts/extensions/in-app-agent/src
 src/scripts/extensions/mcp-manager/src
+src/scripts/extensions/remote-chat/src
 src/scripts/tauri/setting/settings-app
 src/scripts/tauri/setting/dev-logs-app
 src/scripts/tauri/setting/sync-app
@@ -50,6 +53,7 @@ src/scripts/tauri/setting/sync-app
 | Agent System | `agent-system/src/index.tsx` | `agent-system/dist/index.bundle.js` | Agent manifest |
 | In-App Assistant | `in-app-agent/src/index.ts` | `in-app-agent/dist/index.bundle.js`、`index.bundle.css` | Assistant manifest |
 | MCP Manager | `mcp-manager/src/index.tsx` | `mcp-manager/dist/index.bundle.js` | MCP manifest |
+| Remote Chat | `remote-chat/src/index.tsx` | `remote-chat/dist/index.bundle.js` | Remote Chat manifest |
 | Settings | `settings-app/SettingsApp.tsx` | `setting/dist/settings.bundle.js` | `setting-panel/settings-popup.js` |
 | Dev Logs | `dev-logs-app/DevLogsApp.tsx` | `setting/dist/dev-logs.bundle.js` | `setting/dev-logs.js` |
 | Sync | `sync-app/index.ts` | `setting/dist/sync.bundle.js` | Sync popup 与 listener 外壳 |

@@ -178,6 +178,23 @@ export function createRspackConfigs(mode = 'production') {
     module: createReactModule(development),
   };
 
+  const remoteChatConfig = {
+    ...createSharedConfig(mode, 'remote-chat'),
+    entry: {
+      index: './src/scripts/extensions/remote-chat/src/index.tsx',
+    },
+    output: {
+      filename: '[name].bundle.js',
+      path: path.resolve(__dirname, 'src/scripts/extensions/remote-chat/dist'),
+      module: true,
+      library: {
+        type: 'module'
+      },
+      clean: true,
+    },
+    module: createReactModule(development),
+  };
+
   const inAppAgentConfig = {
     ...createSharedConfig(mode, 'in-app-agent'),
     entry: {
@@ -221,7 +238,14 @@ export function createRspackConfigs(mode = 'production') {
     module: createReactModule(development),
   };
 
-  return [coreConfig, agentSystemConfig, mcpManagerConfig, inAppAgentConfig, tauriTavernSettingsConfig];
+  return [
+    coreConfig,
+    agentSystemConfig,
+    mcpManagerConfig,
+    inAppAgentConfig,
+    remoteChatConfig,
+    tauriTavernSettingsConfig,
+  ];
 }
 
 export default (_env, argv = {}) => createRspackConfigs(argv.mode ?? 'production');

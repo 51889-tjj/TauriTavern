@@ -1,0 +1,16 @@
+{
+    "display_name": "Remote Chat",
+    "loading_order": 27,
+    "requires": [],
+    "optional": [],
+    "js": "dist/index.bundle.js",
+    "css": "style.css",
+    "i18n": {
+        "en-us": "i18n/en-us.json",
+        "zh-cn": "i18n/zh-cn.json"
+    },
+    "author": "TauriTavern",
+    "version": "0.1.0",
+    "description": "A paired-device LAN chat panel for remote access to a desktop TauriTavern session.",
+    "homePage": "https://github.com/Darkatse/TauriTavern"
+}

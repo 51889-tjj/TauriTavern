@@ -1,0 +1,227 @@
+#tauritavern_remote_chat_menu_item {
+    color: var(--SmartThemeBodyColor);
+}
+
+.tt-remote-chat-dialog {
+    width: min(760px, 96vw);
+    height: min(820px, 90dvh);
+    max-width: none;
+    max-height: none;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 14px;
+    color: var(--SmartThemeBodyColor);
+    background: var(--SmartThemeBlurTintColor);
+}
+
+.tt-remote-chat-dialog::backdrop {
+    background: rgb(0 0 0 / 58%);
+}
+
+.tt-remote-chat {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    box-sizing: border-box;
+}
+
+.tt-remote-chat button,
+.tt-remote-chat textarea {
+    color: var(--SmartThemeBodyColor);
+    font: inherit;
+}
+
+.tt-remote-chat button {
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background: var(--SmartThemeQuoteColor);
+}
+
+.tt-remote-chat button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.tt-remote-chat__header,
+.tt-remote-chat__mode,
+.tt-remote-chat__conversation-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.tt-remote-chat__header h2,
+.tt-remote-chat__header p,
+.tt-remote-chat__host p,
+.tt-remote-chat__list h3,
+.tt-remote-chat__list h4 {
+    margin: 0;
+}
+
+.tt-remote-chat__header p {
+    margin-top: 3px;
+    opacity: 0.72;
+}
+
+.tt-remote-chat__close {
+    width: 40px;
+    padding: 0 !important;
+    font-size: 26px !important;
+}
+
+.tt-remote-chat__mode button[aria-pressed="true"] {
+    border-color: var(--SmartThemeQuoteColor);
+    font-weight: 700;
+}
+
+.tt-remote-chat__error {
+    margin: 0;
+    padding: 9px 11px;
+    border: 1px solid var(--SmartThemeUnderlineColor);
+    border-radius: 8px;
+    color: var(--SmartThemeUnderlineColor);
+    overflow-wrap: anywhere;
+}
+
+.tt-remote-chat__host {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 16px;
+}
+
+.tt-remote-chat__status {
+    opacity: 0.75;
+}
+
+.tt-remote-chat__status.is-active {
+    color: var(--SmartThemeQuoteColor);
+    font-weight: 700;
+}
+
+.tt-remote-chat__list {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+}
+
+.tt-remote-chat__list h4 {
+    margin-top: 8px;
+    opacity: 0.75;
+}
+
+.tt-remote-chat__list-item {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    text-align: left;
+}
+
+.tt-remote-chat__list-item span {
+    max-width: 100%;
+    overflow: hidden;
+    opacity: 0.72;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tt-remote-chat__back {
+    align-self: flex-start;
+    min-height: 34px !important;
+    padding: 5px 9px !important;
+}
+
+.tt-remote-chat__conversation {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tt-remote-chat__conversation-header strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tt-remote-chat__messages {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.tt-remote-chat__message {
+    align-self: flex-start;
+    max-width: 92%;
+    padding: 8px 11px;
+    border-radius: 10px;
+    background: var(--SmartThemeQuoteColor);
+    overflow-wrap: anywhere;
+}
+
+.tt-remote-chat__message.is-user {
+    align-self: flex-end;
+    background: var(--SmartThemeBlurTintColor);
+}
+
+.tt-remote-chat__message.is-system {
+    align-self: center;
+    opacity: 0.8;
+}
+
+.tt-remote-chat__message p {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.tt-remote-chat__composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.tt-remote-chat__composer textarea {
+    min-height: 42px;
+    max-height: 30dvh;
+    flex: 1;
+    resize: vertical;
+    padding: 8px 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background: var(--SmartThemeBlurTintColor);
+}
+
+@media (max-width: 600px) {
+    .tt-remote-chat-dialog {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .tt-remote-chat {
+        padding: 10px;
+    }
+}

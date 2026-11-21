@@ -19,6 +19,12 @@ use crate::sync::lan::server::{
 };
 use crate::sync::lan::store::LanPeerStore;
 use tt_contracts::lan_discovery::LanDiscoveryAnnouncement;
+use tt_contracts::remote_chat::{
+    RemoteChatCatalog, RemoteChatChatsRequest, RemoteChatEventsPage, RemoteChatEventsRequest,
+    RemoteChatHistory, RemoteChatHistoryRequest, RemoteChatOwner, RemoteChatSessionRequest,
+    RemoteChatSessionStatus, RemoteChatStopRequest, RemoteChatSubmit, RemoteChatSubmitRequest,
+    RemoteChatSubmitResponse, RemoteChatSummary, RemoteChatTarget,
+};
 use tt_contracts::sync::SyncOperationOptions;
 use tt_domain::errors::DomainError;
 use tt_domain::models::lan_sync::{
@@ -161,6 +167,195 @@ impl LanSyncClient {
             .bytes()
             .await
             .map_err(|error| DomainError::InternalError(error.to_string()))?;
+        Ok(())
+    }
+
+    pub async fn remote_chat_status(
+        &self,
+        session_token: &SessionToken,
+    ) -> Result<RemoteChatSessionStatus, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .get(self.inner.endpoint_url("/v2/remote-chat/status")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        ensure_success(response, "Cannot read Remote Chat status")
+            .await?
+            .json()
+            .await
+            .map_err(|error| DomainError::InvalidData(error.to_string()))
+    }
+
+    pub async fn remote_chat_catalog(
+        &self,
+        session_token: &SessionToken,
+        remote_session_id: &str,
+    ) -> Result<RemoteChatCatalog, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(self.inner.endpoint_url("/v2/remote-chat/catalog")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(&RemoteChatSessionRequest {
+                session_id: remote_session_id.to_string(),
+            })
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        ensure_success(response, "Cannot read Remote Chat catalog")
+            .await?
+            .json()
+            .await
+            .map_err(|error| DomainError::InvalidData(error.to_string()))
+    }
+
+    pub async fn remote_chat_list_chats(
+        &self,
+        session_token: &SessionToken,
+        remote_session_id: &str,
+        owner: RemoteChatOwner,
+    ) -> Result<Vec<RemoteChatSummary>, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(self.inner.endpoint_url("/v2/remote-chat/chats")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(&RemoteChatChatsRequest {
+                session_id: remote_session_id.to_string(),
+                owner,
+            })
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        ensure_success(response, "Cannot list Remote Chat conversations")
+            .await?
+            .json()
+            .await
+            .map_err(|error| DomainError::InvalidData(error.to_string()))
+    }
+
+    pub async fn remote_chat_history(
+        &self,
+        session_token: &SessionToken,
+        remote_session_id: &str,
+        target: RemoteChatTarget,
+    ) -> Result<RemoteChatHistory, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(self.inner.endpoint_url("/v2/remote-chat/history")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(&RemoteChatHistoryRequest {
+                session_id: remote_session_id.to_string(),
+                target,
+            })
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        ensure_success(response, "Cannot read Remote Chat history")
+            .await?
+            .json()
+            .await
+            .map_err(|error| DomainError::InvalidData(error.to_string()))
+    }
+
+    pub async fn remote_chat_submit(
+        &self,
+        session_token: &SessionToken,
+        remote_session_id: &str,
+        request: RemoteChatSubmit,
+    ) -> Result<RemoteChatSubmitResponse, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(self.inner.endpoint_url("/v2/remote-chat/messages")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(&RemoteChatSubmitRequest {
+                session_id: remote_session_id.to_string(),
+                request,
+            })
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        ensure_success(response, "Cannot send Remote Chat message")
+            .await?
+            .json()
+            .await
+            .map_err(|error| DomainError::InvalidData(error.to_string()))
+    }
+
+    pub async fn remote_chat_events(
+        &self,
+        session_token: &SessionToken,
+        remote_session_id: &str,
+        after_sequence: u64,
+    ) -> Result<RemoteChatEventsPage, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(self.inner.endpoint_url("/v2/remote-chat/events")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(&RemoteChatEventsRequest {
+                session_id: remote_session_id.to_string(),
+                after_sequence,
+            })
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        ensure_success(response, "Cannot read Remote Chat events")
+            .await?
+            .json()
+            .await
+            .map_err(|error| DomainError::InvalidData(error.to_string()))
+    }
+
+    pub async fn remote_chat_stop(
+        &self,
+        session_token: &SessionToken,
+        remote_session_id: &str,
+        request_id: &str,
+    ) -> Result<(), DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(self.inner.endpoint_url("/v2/remote-chat/stop")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(&RemoteChatStopRequest {
+                session_id: remote_session_id.to_string(),
+                request_id: request_id.to_string(),
+            })
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        ensure_success(response, "Cannot stop Remote Chat generation")
+            .await?
+            .bytes()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
         Ok(())
     }
 }

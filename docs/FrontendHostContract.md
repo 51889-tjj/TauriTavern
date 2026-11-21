@@ -178,6 +178,12 @@ ESM `/scripts/secrets.js` 的 `writeSecret`、`deleteSecret`、`readSecretState`
 - `openEntry()` 必须复用上游 World Info 模块自身的导航能力；宿主 ABI 层不得直接依赖 `#WorldInfo`、`#world_editor_select`、`[uid=\"...\"]` 等 DOM 细节。
 
 - `api.agent`：运行控制、历史、工作区详情与 Profile 管理，见 [Agent API](API/Agent.md)。
+
+- `api.remoteChat`：经已配对 LAN 设备连接到桌面 Remote Chat 会话。
+  - `host.available` 标识当前宿主能否开启远程主机；`host.status()`、`startSession()` 和 `stopSession()` 管理临时会话。
+  - `client.listPairedDevices()`、`connect(deviceId)`、`disconnect(deviceId)` 管理客户端连接；其余 `listCatalog`、`listChats`、`getHistory`、`submit`、`readEvents` 和 `stopGeneration` 均要求传入已连接设备 ID 与桌面会话 ID。
+  - 桌面到生成桥的命令事件与 token 发布仅供内置前端适配器使用，不属于第三方扩展 API。LAN HTTPS、证书固定、签名会话和 Tauri 原生网络客户端由 Host 拥有；插件 UI 不读取设备密钥或同步令牌。
+  - 远程聊天会话由桌面用户显式开启，LAN Sync 配对本身不会开启聊天控制。协议边界与首版限制见 [Remote Chat](RemoteChat.md)。
   - Chat 与 Session 接受统一的 Agent snapshot；Run 事件与实时投影独立于 SillyTavern 生成事件。
   - Chat 使用稳定聊天身份，宿主提交桥复用聊天保存流程；保存成功或明确失败后释放生成状态。续接保留 Run 身份，分叉创建新聊天身份并复制持久版本。
   - Session 独立于当前角色聊天和写作生成状态，不发出 SillyTavern 聊天/生成事件；目录、共享配置与连续历史由后端管理，提示词与宏环境见 [Prompt assembly](Agent/PromptAssembly.md)。Agent Mode 只控制 Chat 的 Agent/Legacy 路由。

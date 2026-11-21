@@ -36,6 +36,8 @@ import { installLlmConnectionsApi } from './api/llm-connection.js';
 import { installMcpApi } from './api/mcp.js';
 import { installSkillApi } from './api/skill.js';
 import { installWorldInfoApi } from './api/world-info.js';
+import { installRemoteChatApi } from './api/remote-chat.js';
+import { installRemoteChatDesktopBridge } from './services/remote-chat/desktop-bridge.js';
 import { initializeTauriIntegration } from './bootstrap/initialize-tauri-integration.js';
 import {
     getMethod,
@@ -258,6 +260,16 @@ export function bootstrapTauriMain() {
     installHostAbi(context); installLayoutApi(); installChatApi(context); installChatSurfaceApi(); installCharacterCardsApi(context);
     const restoreAgentAssemblyBridges = installAgentApi(context);
     installLlmConnectionsApi(context); installMcpApi(context); installSkillApi(context); installDevApi(context); installExtensionStoreApi(context); installDbApi(context); installWorldInfoApi();
+    const remoteChatHostBootstrap = installRemoteChatApi(context);
+    void installRemoteChatDesktopBridge({
+        safeInvoke: context.safeInvoke,
+        getSessionId: remoteChatHostBootstrap.getSessionId,
+        markSessionEnded: remoteChatHostBootstrap.markSessionEnded,
+    })
+        .then(() => remoteChatHostBootstrap.markDesktopBridgeReady())
+        .catch(error => {
+            console.error('[TauriTavern] Failed to install Remote Chat desktop bridge:', error);
+        });
     installMainApiOptionParking();
     installWorldInfoGlobalSelectorSelect2Enforcer();
     if (perfEnabled) {

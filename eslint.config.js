@@ -7,6 +7,7 @@ const ownedUiFiles = [
   'src/scripts/extensions/agent-system/src/**/*.{ts,tsx}',
   'src/scripts/extensions/in-app-agent/src/**/*.{ts,tsx}',
   'src/scripts/extensions/mcp-manager/src/**/*.{ts,tsx}',
+  'src/scripts/extensions/remote-chat/src/**/*.{ts,tsx}',
   'src/scripts/tauri/setting/**/*.{ts,tsx}',
 ];
 

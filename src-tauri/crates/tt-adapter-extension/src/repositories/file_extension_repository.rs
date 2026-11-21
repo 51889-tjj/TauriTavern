@@ -57,6 +57,7 @@ const SYSTEM_EXTENSIONS: &[&str] = &[
     "agent-system",
     "in-app-agent",
     "mcp-manager",
+    "remote-chat",
     "translate",
     "tts",
 ];

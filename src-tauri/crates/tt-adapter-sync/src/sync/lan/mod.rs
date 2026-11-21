@@ -2,6 +2,7 @@ pub mod client;
 pub mod control;
 pub mod discovery;
 pub mod peer_discovery;
+pub mod remote_chat_client;
 pub mod server;
 pub mod store;
 

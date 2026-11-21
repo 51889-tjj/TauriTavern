@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use axum::{
     Json, Router,
-    extract::{State, rejection::JsonRejection},
+    extract::{DefaultBodyLimit, State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -22,12 +22,17 @@ use super::LanStatusResponse;
 use crate::sync::http_client::{domain_error_to_sync, sync_error_to_domain};
 use crate::sync::lan::store::LanPeerStore;
 use crate::sync::workspace::TauriTavernSyncWorkspace as LanManifestStore;
+use tt_contracts::remote_chat::{
+    RemoteChatChatsRequest, RemoteChatEventsRequest, RemoteChatHistoryRequest,
+    RemoteChatSessionRequest, RemoteChatStopRequest, RemoteChatSubmitRequest,
+};
 use tt_contracts::sync::PAIRING_REJECTED_MESSAGE;
 use tt_contracts::sync::SyncOperationOptions;
 use tt_domain::errors::DomainError;
 use tt_domain::models::lan_sync::{LanPairCompleteRequest, LanPairCompleteResponse};
 use tt_ports::database::DatabaseFileAccess;
 use tt_ports::lan_sync::{LanInboundRequestHandler, LanServerEvents, LanServerInfo};
+use tt_ports::remote_chat::RemoteChatApi;
 
 const LAN_HTTPS_FEATURE_V1: &str = "lan_https_v1";
 const LAN_SESSION_FEATURE_V1: &str = "lan_session_v1";
@@ -64,6 +69,7 @@ pub async fn spawn_lan_sync_server(
     inbound: Arc<dyn LanInboundRequestHandler>,
     events: Arc<dyn LanServerEvents>,
     database: Arc<dyn DatabaseFileAccess>,
+    remote_chat: Arc<dyn RemoteChatApi>,
 ) -> Result<LanSyncServerHandle, DomainError> {
     install_rustls_crypto_provider();
     let identity = store.load_or_create_identity().await?;
@@ -103,12 +109,24 @@ pub async fn spawn_lan_sync_server(
         inbound,
         events: events.clone(),
         shared: shared_state.clone(),
+        remote_chat,
     });
+
+    let remote_chat_router = Router::new()
+        .route("/v2/remote-chat/status", get(handle_remote_chat_status))
+        .route("/v2/remote-chat/catalog", post(handle_remote_chat_catalog))
+        .route("/v2/remote-chat/chats", post(handle_remote_chat_chats))
+        .route("/v2/remote-chat/history", post(handle_remote_chat_history))
+        .route("/v2/remote-chat/messages", post(handle_remote_chat_submit))
+        .route("/v2/remote-chat/events", post(handle_remote_chat_events))
+        .route("/v2/remote-chat/stop", post(handle_remote_chat_stop))
+        .layer(DefaultBodyLimit::max(96 * 1024));
 
     let app = Router::new()
         .route("/v2/status", get(handle_lan_status))
         .route("/v2/lan/pair/complete", post(handle_lan_pair_complete))
         .route("/v2/lan/pull-request", post(handle_pull_request))
+        .merge(remote_chat_router)
         .with_state(lan_state)
         .fallback_service(build_transfer_router(shared_state));
 
@@ -251,6 +269,7 @@ struct LanServerState {
     inbound: Arc<dyn LanInboundRequestHandler>,
     events: Arc<dyn LanServerEvents>,
     shared: Arc<SharedLanServerState>,
+    remote_chat: Arc<dyn RemoteChatApi>,
 }
 
 async fn handle_lan_status(
@@ -305,6 +324,121 @@ async fn handle_pull_request(
             "ok": true,
         })),
     ))
+}
+
+async fn authenticate_remote_chat(
+    state: &LanServerState,
+    headers: &HeaderMap,
+) -> Result<(), ApiError> {
+    state
+        .shared
+        .authenticate_headers(headers)
+        .await
+        .map(|_| ())
+        .map_err(ApiError::from)
+}
+
+async fn handle_remote_chat_status(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+) -> Result<Json<tt_contracts::remote_chat::RemoteChatSessionStatus>, ApiError> {
+    authenticate_remote_chat(&state, &headers).await?;
+    state
+        .remote_chat
+        .session_status()
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn handle_remote_chat_catalog(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteChatSessionRequest>,
+) -> Result<Json<tt_contracts::remote_chat::RemoteChatCatalog>, ApiError> {
+    authenticate_remote_chat(&state, &headers).await?;
+    state
+        .remote_chat
+        .list_catalog(&request.session_id)
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn handle_remote_chat_chats(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteChatChatsRequest>,
+) -> Result<Json<Vec<tt_contracts::remote_chat::RemoteChatSummary>>, ApiError> {
+    authenticate_remote_chat(&state, &headers).await?;
+    state
+        .remote_chat
+        .list_chats(&request.session_id, request.owner)
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn handle_remote_chat_history(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteChatHistoryRequest>,
+) -> Result<Json<tt_contracts::remote_chat::RemoteChatHistory>, ApiError> {
+    authenticate_remote_chat(&state, &headers).await?;
+    state
+        .remote_chat
+        .get_history(&request.session_id, request.target)
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn handle_remote_chat_submit(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteChatSubmitRequest>,
+) -> Result<
+    (
+        StatusCode,
+        Json<tt_contracts::remote_chat::RemoteChatSubmitResponse>,
+    ),
+    ApiError,
+> {
+    authenticate_remote_chat(&state, &headers).await?;
+    let response = state
+        .remote_chat
+        .submit(&request.session_id, request.request)
+        .await
+        .map_err(ApiError::from)?;
+    Ok((StatusCode::ACCEPTED, Json(response)))
+}
+
+async fn handle_remote_chat_events(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteChatEventsRequest>,
+) -> Result<Json<tt_contracts::remote_chat::RemoteChatEventsPage>, ApiError> {
+    authenticate_remote_chat(&state, &headers).await?;
+    state
+        .remote_chat
+        .read_events(&request.session_id, request.after_sequence)
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn handle_remote_chat_stop(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteChatStopRequest>,
+) -> Result<StatusCode, ApiError> {
+    authenticate_remote_chat(&state, &headers).await?;
+    state
+        .remote_chat
+        .stop_generation(&request.session_id, &request.request_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Debug)]
@@ -400,6 +534,7 @@ mod tests {
     use tokio::sync::{Mutex, mpsc};
     use tt_contracts::lan_discovery::LanDiscoveryAnnouncement;
     use tt_ports::lan_sync::LanPairingClient;
+    use tt_ports::remote_chat::RemoteChatApi;
     use ttsync_client::{ClientSyncEngine, ClientSyncOptions, ClientSyncTarget, NoopSyncObserver};
     use ttsync_contract::dataset::{
         DATASET_POLICY_VERSION, DATASET_SCOPE_FEATURE_V1, DatasetSelection,
@@ -424,6 +559,80 @@ mod tests {
     }
 
     struct NoopInboundHandler;
+
+    struct NoopRemoteChatApi;
+
+    #[async_trait]
+    impl RemoteChatApi for NoopRemoteChatApi {
+        async fn stop_host_session(&self) -> Result<(), DomainError> {
+            Ok(())
+        }
+
+        async fn session_status(
+            &self,
+        ) -> Result<tt_contracts::remote_chat::RemoteChatSessionStatus, DomainError> {
+            Ok(tt_contracts::remote_chat::RemoteChatSessionStatus {
+                active: false,
+                session_id: None,
+            })
+        }
+
+        async fn list_catalog(
+            &self,
+            _session_id: &str,
+        ) -> Result<tt_contracts::remote_chat::RemoteChatCatalog, DomainError> {
+            Ok(tt_contracts::remote_chat::RemoteChatCatalog {
+                characters: Vec::new(),
+                groups: Vec::new(),
+            })
+        }
+
+        async fn list_chats(
+            &self,
+            _session_id: &str,
+            _owner: tt_contracts::remote_chat::RemoteChatOwner,
+        ) -> Result<Vec<tt_contracts::remote_chat::RemoteChatSummary>, DomainError> {
+            Ok(Vec::new())
+        }
+
+        async fn get_history(
+            &self,
+            _session_id: &str,
+            _target: tt_contracts::remote_chat::RemoteChatTarget,
+        ) -> Result<tt_contracts::remote_chat::RemoteChatHistory, DomainError> {
+            Err(DomainError::NotFound("Remote Chat history".to_string()))
+        }
+
+        async fn submit(
+            &self,
+            _session_id: &str,
+            _request: tt_contracts::remote_chat::RemoteChatSubmit,
+        ) -> Result<tt_contracts::remote_chat::RemoteChatSubmitResponse, DomainError> {
+            Err(DomainError::Conflict(
+                "Remote Chat is disabled in this test".to_string(),
+            ))
+        }
+
+        async fn read_events(
+            &self,
+            _session_id: &str,
+            _after_sequence: u64,
+        ) -> Result<tt_contracts::remote_chat::RemoteChatEventsPage, DomainError> {
+            Ok(tt_contracts::remote_chat::RemoteChatEventsPage {
+                events: Vec::new(),
+                next_sequence: 0,
+                generation_active: false,
+            })
+        }
+
+        async fn stop_generation(
+            &self,
+            _session_id: &str,
+            _request_id: &str,
+        ) -> Result<(), DomainError> {
+            Ok(())
+        }
+    }
 
     #[async_trait]
     impl LanInboundRequestHandler for NoopInboundHandler {
@@ -595,6 +804,7 @@ mod tests {
             noop_inbound(),
             recording_events(),
             crate::sync::workspace::empty_database_access(),
+            Arc::new(NoopRemoteChatApi),
         )
         .await
         .expect("spawn LAN Sync server");
@@ -679,6 +889,47 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(default_user_dir).await;
     }
 
+    #[tokio::test]
+    async fn remote_chat_status_requires_a_paired_authenticated_session() {
+        let default_user_dir = temp_default_user_dir();
+        let store = LanPeerStore::new(
+            default_user_dir.clone(),
+            tt_contracts::host::HostPlatform::Linux,
+        );
+        let handle = spawn_lan_sync_server(
+            "127.0.0.1:0".parse().unwrap(),
+            default_user_dir.clone(),
+            store,
+            noop_inbound(),
+            recording_events(),
+            crate::sync::workspace::empty_database_access(),
+            Arc::new(NoopRemoteChatApi),
+        )
+        .await
+        .expect("spawn LAN Sync server");
+        let client = new_sync_client(
+            format!("https://127.0.0.1:{}", handle.addr.port()),
+            handle.spki_sha256.clone(),
+            TEST_USER_AGENT,
+        )
+        .expect("pinned client");
+
+        let response = client
+            .http()
+            .get(
+                client
+                    .endpoint_url("/v2/remote-chat/status")
+                    .expect("Remote Chat status URL"),
+            )
+            .send()
+            .await
+            .expect("unauthenticated request");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        handle.shutdown();
+        let _ = tokio::fs::remove_dir_all(default_user_dir).await;
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn pair_complete_exchanges_identity_over_pinned_https() {
         let default_user_dir = temp_default_user_dir();
@@ -712,6 +963,7 @@ mod tests {
             inbound.clone(),
             events.clone(),
             crate::sync::workspace::empty_database_access(),
+            Arc::new(NoopRemoteChatApi),
         )
         .await
         .expect("spawn LAN Sync server");
@@ -863,6 +1115,7 @@ mod tests {
             noop_inbound(),
             recording_events(),
             crate::sync::workspace::empty_database_access(),
+            Arc::new(NoopRemoteChatApi),
         )
         .await
         .expect("spawn LAN Sync server");

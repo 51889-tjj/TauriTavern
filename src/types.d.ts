@@ -1392,6 +1392,110 @@ type TauriTavernChatSurfaceApi = {
     ) => { refresh: () => Promise<void> };
 };
 
+type TauriTavernRemoteChatTarget =
+    | { kind: 'character'; characterName: string; fileName: string }
+    | { kind: 'group'; groupId: string; chatId: string };
+
+type TauriTavernRemoteChatOwner =
+    | { kind: 'character'; characterName: string }
+    | { kind: 'group'; groupId: string };
+
+type TauriTavernRemoteChatSessionStatus = {
+    active: boolean;
+    sessionId?: string;
+};
+
+type TauriTavernRemoteChatCharacter = {
+    characterName: string;
+    displayName: string;
+    avatar: string;
+};
+
+type TauriTavernRemoteChatGroup = {
+    groupId: string;
+    name: string;
+    avatar: string;
+};
+
+type TauriTavernRemoteChatCatalog = {
+    characters: TauriTavernRemoteChatCharacter[];
+    groups: TauriTavernRemoteChatGroup[];
+};
+
+type TauriTavernRemoteChatSummary = {
+    target: TauriTavernRemoteChatTarget;
+    title: string;
+    preview: string;
+    messageCount: number;
+    updatedAtMs: number;
+};
+
+type TauriTavernRemoteChatMessage = {
+    name: string;
+    isUser: boolean;
+    isSystem: boolean;
+    text: string;
+    sentAt: string;
+};
+
+type TauriTavernRemoteChatHistory = {
+    target: TauriTavernRemoteChatTarget;
+    title: string;
+    messages: TauriTavernRemoteChatMessage[];
+    generationActive: boolean;
+    latestSequence: number;
+};
+
+type TauriTavernRemoteChatEvent = {
+    sequence: number;
+    requestId: string;
+    kind: 'token' | 'completed' | 'stopped' | 'failed';
+    text?: string;
+    error?: string;
+};
+
+type TauriTavernRemoteChatApi = {
+    host: {
+        available: boolean;
+        status: () => Promise<TauriTavernRemoteChatSessionStatus>;
+        startSession: () => Promise<TauriTavernRemoteChatSessionStatus>;
+        stopSession: () => Promise<void>;
+    };
+    client: {
+        listPairedDevices: () => Promise<Array<{
+            device_id: string;
+            device_name: string;
+            platform?: string | null;
+            last_known_address?: string | null;
+        }>>;
+        connect: (deviceId: string) => Promise<TauriTavernRemoteChatSessionStatus>;
+        disconnect: (deviceId: string) => Promise<void>;
+        status: (deviceId: string) => Promise<TauriTavernRemoteChatSessionStatus>;
+        listCatalog: (deviceId: string, sessionId: string) => Promise<TauriTavernRemoteChatCatalog>;
+        listChats: (
+            deviceId: string,
+            sessionId: string,
+            owner: TauriTavernRemoteChatOwner,
+        ) => Promise<TauriTavernRemoteChatSummary[]>;
+        getHistory: (
+            deviceId: string,
+            sessionId: string,
+            target: TauriTavernRemoteChatTarget,
+        ) => Promise<TauriTavernRemoteChatHistory>;
+        submit: (
+            deviceId: string,
+            sessionId: string,
+            request: { requestId: string; target: TauriTavernRemoteChatTarget; text: string },
+        ) => Promise<{ requestId: string; accepted: boolean }>;
+        readEvents: (
+            deviceId: string,
+            sessionId: string,
+            afterSequence: number,
+        ) => Promise<{ events: TauriTavernRemoteChatEvent[]; nextSequence: number; generationActive: boolean }>;
+        stopGeneration: (deviceId: string, sessionId: string, requestId: string) => Promise<void>;
+    };
+};
+
 type TauriTavernHostApi = {
     db?: import('./tauri/main/api/db-types').DatabaseApi;
     chat?: TauriTavernChatApi;
@@ -1405,6 +1509,7 @@ type TauriTavernHostApi = {
     dev?: TauriTavernDevApi;
     worldInfo?: TauriTavernWorldInfoApi;
     extension?: TauriTavernExtensionApi;
+    remoteChat?: TauriTavernRemoteChatApi;
 };
 
 type TauriTavernHostAbi = {

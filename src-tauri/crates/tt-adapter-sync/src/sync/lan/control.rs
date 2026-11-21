@@ -14,6 +14,7 @@ use tt_domain::errors::DomainError;
 use tt_ports::lan_sync::{
     LanInboundRequestHandler, LanServerControl, LanServerEvents, LanServerInfo,
 };
+use tt_ports::remote_chat::RemoteChatApi;
 
 pub struct AxumLanServerControl {
     sync_root: PathBuf,
@@ -23,6 +24,7 @@ pub struct AxumLanServerControl {
     discovery: LanPeerDiscovery,
     server: Mutex<Option<LanSyncServerHandle>>,
     database: Arc<dyn DatabaseFileAccess>,
+    remote_chat: Arc<dyn RemoteChatApi>,
 }
 
 impl AxumLanServerControl {
@@ -33,6 +35,7 @@ impl AxumLanServerControl {
         events: Arc<dyn LanServerEvents>,
         discovery: LanPeerDiscovery,
         database: Arc<dyn DatabaseFileAccess>,
+        remote_chat: Arc<dyn RemoteChatApi>,
     ) -> Self {
         Self {
             database,
@@ -42,6 +45,7 @@ impl AxumLanServerControl {
             events,
             discovery,
             server: Mutex::new(None),
+            remote_chat,
         }
     }
 }
@@ -63,6 +67,7 @@ impl LanServerControl for AxumLanServerControl {
             self.inbound.clone(),
             self.events.clone(),
             self.database.clone(),
+            self.remote_chat.clone(),
         )
         .await?;
         let info = handle.info();
@@ -84,6 +89,7 @@ impl LanServerControl for AxumLanServerControl {
     }
 
     async fn stop(&self) -> Result<(), DomainError> {
+        let remote_chat_result = self.remote_chat.stop_host_session().await;
         let handle = self.server.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown();
@@ -91,7 +97,7 @@ impl LanServerControl for AxumLanServerControl {
         if let Err(error) = self.discovery.stop().await {
             tracing::warn!("Failed to release LAN discovery resources: {error}");
         }
-        Ok(())
+        remote_chat_result
     }
 
     async fn running_info(&self) -> Option<LanServerInfo> {
