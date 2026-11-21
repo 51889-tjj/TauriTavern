@@ -58,5 +58,5 @@
 ## 原型打包
 
 - Windows 桌面安装包：在仓库根目录运行 `pnpm run tauri:build`。这只在 `src-tauri/target/` 生成构建产物，不会安装、覆盖现有应用或操作用户数据。
-- TrollStore IPA：`.github/workflows/remote-chat-ios-trollstore.yml` 使用 macOS runner，通过 Tauri iOS CLI 的 `--no-sign` 构建并上传 IPA artifact。它位于本地原型分支；需先推送到有 Actions 权限的 fork 才能触发。该 workflow 未在 GitHub runner 上实测。
+- TrollStore IPA：`.github/workflows/remote-chat-ios-trollstore.yml` 使用 macOS runner，通过 Tauri iOS CLI 的 `--no-sign` 构建并上传 IPA artifact。推送 `remote-chat-lan-mvp` 分支会触发构建；也可手动运行并填写 `source_ref`。该 workflow 位于 fork 中，且尚未在 GitHub runner 上实测。
 - TrollStore 官方支持范围受 iOS 版本限制；IPA 构建成功不代表所有 iOS 版本都能安装。
