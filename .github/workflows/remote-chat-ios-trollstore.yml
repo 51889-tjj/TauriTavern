@@ -1,0 +1,69 @@
+name: Remote Chat iOS IPA for TrollStore
+
+on:
+  push:
+    branches:
+      - remote-chat-lan-mvp
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag, or commit to build
+        required: true
+        default: remote-chat-lan-mvp
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      TAURITAVERN_IOS_POLICY_PROFILE: full
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref_name }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - uses: pnpm/setup@v2
+        with:
+          runtime: node@22
+          cache: true
+          install: false
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Enable LAN-compatible mobile transport configuration
+        run: ./scripts/ci/configure-mobile-http.sh enable ios
+
+      - name: Build unsigned iOS IPA
+        run: pnpm run ios:build -- --no-sign
+
+      - name: Restore repository transport configuration
+        if: always()
+        run: ./scripts/ci/configure-mobile-http.sh disable ios
+
+      - name: Stage IPA artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          ipa_path="$(find src-tauri/crates/tauritavern/gen/apple/build -type f -name '*.ipa' -print -quit)"
+          if [[ -z "$ipa_path" ]]; then
+            echo "Tauri iOS build did not produce an IPA."
+            find src-tauri/crates/tauritavern/gen/apple/build -maxdepth 4 -type f -print || true
+            exit 1
+          fi
+          mkdir -p artifact
+          cp "$ipa_path" artifact/TauriTavern-RemoteChat-TrollStore.ipa
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: TauriTavern-RemoteChat-TrollStore-${{ github.run_number }}
+          path: artifact/TauriTavern-RemoteChat-TrollStore.ipa
+          if-no-files-found: error
+          retention-days: 7
