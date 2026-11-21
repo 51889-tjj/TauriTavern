@@ -1,0 +1,55 @@
+workflows:
+  remote-chat-ios-trollstore:
+    name: TauriTavern Remote Chat (TrollStore IPA)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      node: 22
+      vars:
+        CI: "true"
+        TAURITAVERN_IOS_POLICY_PROFILE: full
+    scripts:
+      - name: Install Rust iOS target
+        script: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal
+          fi
+          if [[ -f "$HOME/.cargo/env" ]]; then
+            source "$HOME/.cargo/env"
+          fi
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-apple-ios
+      - name: Install JavaScript dependencies
+        script: |
+          set -euo pipefail
+          npm install --global pnpm@11.22.0
+          pnpm install --frozen-lockfile
+      - name: Build unsigned TrollStore IPA
+        script: |
+          set -euo pipefail
+          ./scripts/ci/configure-mobile-http.sh enable ios
+          restore_mobile_config() {
+            ./scripts/ci/configure-mobile-http.sh disable ios
+          }
+          trap restore_mobile_config EXIT
+          pnpm run ios:build -- --ci --no-sign
+      - name: Stage IPA artifact
+        script: |
+          set -euo pipefail
+          ipa_path="$(find src-tauri/crates/tauritavern/gen/apple/build \
+            -type f -name '*.ipa' -print -quit)"
+          if [[ -z "$ipa_path" ]]; then
+            echo "Tauri iOS build did not produce an IPA."
+            find src-tauri/crates/tauritavern/gen/apple/build \
+              -maxdepth 5 -type f -print || true
+            exit 1
+          fi
+          mkdir -p artifacts
+          cp "$ipa_path" artifacts/TauriTavern-RemoteChat-TrollStore.ipa
+    artifacts:
+      - artifacts/TauriTavern-RemoteChat-TrollStore.ipa
