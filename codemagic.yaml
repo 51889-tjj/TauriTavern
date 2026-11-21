@@ -27,8 +27,7 @@ workflows:
       - name: Install JavaScript dependencies
         script: |
           set -euo pipefail
-          npm install --global pnpm@11.22.0
-          pnpm install --frozen-lockfile
+          npx --yes pnpm@11.22.0 install --frozen-lockfile
       - name: Build unsigned TrollStore IPA
         script: |
           set -euo pipefail
@@ -37,7 +36,7 @@ workflows:
             ./scripts/ci/configure-mobile-http.sh disable ios
           }
           trap restore_mobile_config EXIT
-          pnpm run ios:build -- --ci --no-sign
+          npx --yes pnpm@11.22.0 run ios:build -- --ci --no-sign
       - name: Stage IPA artifact
         script: |
           set -euo pipefail
