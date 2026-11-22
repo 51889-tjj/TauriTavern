@@ -34,6 +34,9 @@ workflows:
           if [[ -f "$HOME/.cargo/env" ]]; then
             source "$HOME/.cargo/env"
           fi
+          if command -v brew >/dev/null 2>&1 && brew list --versions ca-certificates >/dev/null 2>&1; then
+            brew unlink ca-certificates
+          fi
           npm run remote-chat-shell:ios:init
       - name: Build unsigned TrollStore IPA
         script: |
