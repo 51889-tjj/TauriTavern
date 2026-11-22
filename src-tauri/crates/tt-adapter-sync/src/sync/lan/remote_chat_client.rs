@@ -37,8 +37,10 @@ impl RemoteChatClientConnector for HttpRemoteChatClientConnector {
         identity: LanSyncIdentity,
     ) -> Result<Arc<dyn RemoteChatClientSession>, DomainError> {
         let client = LanSyncClient::new(peer.base_url, peer.spki_sha256, &self.product_user_agent)?;
+        // Session-open authenticates the caller; the selected peer only determines
+        // the destination URL and TLS pin.
         let session = client
-            .open_session(&peer.grant.device_id, &identity.ed25519_seed)
+            .open_session(&identity.device_id, &identity.ed25519_seed)
             .await?;
         Ok(Arc::new(HttpRemoteChatClientSession {
             client,
