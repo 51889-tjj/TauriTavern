@@ -30,6 +30,10 @@ workflows:
       - name: Generate the lightweight iOS host project
         script: |
           set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          if [[ -f "$HOME/.cargo/env" ]]; then
+            source "$HOME/.cargo/env"
+          fi
           npm run remote-chat-shell:ios:init
       - name: Build unsigned TrollStore IPA
         script: |
