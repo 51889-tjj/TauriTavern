@@ -4,7 +4,9 @@ import { spawnSync } from 'node:child_process';
 import {
     createReadStream,
     existsSync,
+    readFileSync,
     statSync,
+    writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
@@ -61,6 +63,61 @@ const result = spawnSync(process.execPath, [command, ...commandArgs], {
 if (result.error) {
     console.error(result.error.message);
     process.exit(1);
+}
+
+if (!webBuild && !webDev && args[0] === 'ios' && args[1] === 'init' && result.status === 0) {
+    const projectFile = path.join(shellRoot, 'gen', 'apple', 'project.yml');
+    const project = readFileSync(projectFile, 'utf8');
+    const buildPhaseName = '        name: Build Rust Code';
+    const buildPhaseIndex = project.indexOf(buildPhaseName);
+    const scriptMarker = '      - script: |\n';
+    const scriptStart = project.lastIndexOf(scriptMarker, buildPhaseIndex);
+    if (buildPhaseIndex < 0 || scriptStart < 0) {
+        console.error(`Cannot locate Tauri's Xcode Rust build phase in ${projectFile}.`);
+        process.exit(1);
+    }
+
+    const xcodeEnvironment = [
+        '          export TAURI_APP_PATH="${SRCROOT}/../.."',
+        '          export TAURI_FRONTEND_PATH="${SRCROOT}/../../../../../remote-chat-shell"',
+        '          echo "Remote Chat Xcode app: $TAURI_APP_PATH"',
+        '          echo "Remote Chat Xcode frontend: $TAURI_FRONTEND_PATH"',
+        '          cd "$TAURI_FRONTEND_PATH" || exit 1',
+        '          if [ ! -f "package.json" ]; then',
+        '            echo "error: Remote Chat shell package.json not found in $TAURI_FRONTEND_PATH" >&2',
+        '            exit 1',
+        '          fi',
+        '',
+    ].join('\n');
+    if (!project.slice(scriptStart, buildPhaseIndex).includes('export TAURI_FRONTEND_PATH=')) {
+        const insertAt = scriptStart + scriptMarker.length;
+        writeFileSync(projectFile, `${project.slice(0, insertAt)}${xcodeEnvironment}${project.slice(insertAt)}`);
+        const xcodegen = spawnSync(
+            'xcodegen',
+            ['generate', '--spec', projectFile],
+            { cwd: path.dirname(projectFile), stdio: 'inherit', env: process.env },
+        );
+        if (xcodegen.error) {
+            console.error(xcodegen.error.message);
+            process.exit(1);
+        }
+        if (xcodegen.status !== 0) {
+            process.exit(xcodegen.status ?? 1);
+        }
+        const xcodeProjectPath = path.join(
+            shellRoot,
+            'gen',
+            'apple',
+            'tt-remote-chat-shell.xcodeproj',
+            'project.pbxproj',
+        );
+        const xcodeProject = readFileSync(xcodeProjectPath, 'utf8');
+        if (!xcodeProject.includes('TAURI_FRONTEND_PATH')) {
+            console.error(`XcodeGen did not apply the standalone shell path settings: ${xcodeProjectPath}`);
+            process.exit(1);
+        }
+        console.log('Xcode Rust build phase now runs from the standalone shell frontend.');
+    }
 }
 
 if (webDev && result.status === 0) {
