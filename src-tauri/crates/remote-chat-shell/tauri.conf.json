@@ -26,6 +26,7 @@
         "resizable": true,
         "fullscreen": false,
         "disableInputAccessoryView": true,
+        "backgroundColor": "#171719",
         "center": true
       }
     ],
