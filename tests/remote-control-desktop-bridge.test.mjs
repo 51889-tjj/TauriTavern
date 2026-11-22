@@ -76,3 +76,73 @@ test('desktop bridge dispatches the remote TauriTavern settings read', async () 
         }
     }
 });
+
+test('desktop bridge encodes settings bytes compactly for the remote response', async () => {
+    const previousWindow = globalThis.window;
+    let onCommand;
+    let resolvePublished;
+    const published = new Promise(resolve => {
+        resolvePublished = resolve;
+    });
+
+    globalThis.window = {
+        __TAURI__: {
+            event: {
+                listen: async (_eventName, callback) => {
+                    onCommand = callback;
+                    return () => {};
+                },
+            },
+        },
+        __TAURITAVERN__: {
+            api: {
+                remoteControl: {
+                    host: { available: true },
+                },
+            },
+        },
+        addEventListener() {},
+    };
+
+    try {
+        await installRemoteControlDesktopBridge({
+            safeInvoke: async (command, args) => {
+                if (command === 'get_sillytavern_settings') {
+                    return Uint8Array.from([0, 1, 127, 255]);
+                }
+                if (command === 'remote_control_publish_result') {
+                    resolvePublished(args.result);
+                    return undefined;
+                }
+                throw new Error(`Unexpected desktop command: ${command}`);
+            },
+            invokeTransport: async command => {
+                throw new Error(`Unexpected transport command: ${command}`);
+            },
+            getSessionId: () => 'control-session',
+            markSessionStarted() {},
+            markSessionEnded() {},
+        });
+
+        onCommand({
+            payload: {
+                kind: 'invoke',
+                sessionId: 'control-session',
+                requestId: 'request-bytes',
+                operation: { kind: 'get_sillytavern_settings' },
+            },
+        });
+
+        const result = await published;
+        assert.deepEqual(result.outcome, {
+            kind: 'success',
+            value: { kind: 'bytes_base64', value: 'AAF//w==' },
+        });
+    } finally {
+        if (previousWindow === undefined) {
+            delete globalThis.window;
+        } else {
+            globalThis.window = previousWindow;
+        }
+    }
+});

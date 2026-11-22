@@ -1103,7 +1103,10 @@ async function fetchBootstrapMetadata() {
     });
 
     if (!response.ok) {
-        throw new Error(`Bootstrap metadata request failed with status ${response.status}`);
+        const detail = (await response.text()).trim().slice(0, 1_024);
+        throw new Error(
+            `Bootstrap metadata request failed with status ${response.status}${detail ? `: ${detail}` : ''}`,
+        );
     }
 
     return response.json();
@@ -1117,7 +1120,10 @@ async function fetchSettingsSnapshot() {
         cache: 'no-cache',
     });
     if (!response.ok) {
-        throw new Error(`Settings request failed with status ${response.status}`);
+        const detail = (await response.text()).trim().slice(0, 1_024);
+        throw new Error(
+            `Settings request failed with status ${response.status}${detail ? `: ${detail}` : ''}`,
+        );
     }
     return response.json();
 }

@@ -139,7 +139,8 @@ impl RemoteControlService {
         &self,
         result: RemoteControlInvokeResult,
     ) -> Result<(), DomainError> {
-        validate_result(&result)?;
+        validate_result_identity(&result)?;
+        let too_large = result_size(&result)? > REMOTE_CONTROL_MAX_RESULT_BYTES;
         let response = {
             let mut runtime = self.runtime.lock().await;
             if runtime.session_id.as_deref() != Some(result.session_id.as_str()) {
@@ -154,9 +155,13 @@ impl RemoteControlService {
             })?
         };
 
-        let outcome = match result.outcome {
-            RemoteControlOutcome::Success(value) => Ok(value),
-            RemoteControlOutcome::Failure(message) => Err(message),
+        let outcome = if too_large {
+            Err("Remote Control response exceeds the allowed size".to_string())
+        } else {
+            match result.outcome {
+                RemoteControlOutcome::Success(value) => Ok(value),
+                RemoteControlOutcome::Failure(message) => Err(message),
+            }
         };
         response.send(outcome).map_err(|_| {
             DomainError::Conflict(
@@ -207,7 +212,7 @@ fn validate_request(request: &RemoteControlInvokeRequest) -> Result<(), DomainEr
     Ok(())
 }
 
-fn validate_result(result: &RemoteControlInvokeResult) -> Result<(), DomainError> {
+fn validate_result_identity(result: &RemoteControlInvokeResult) -> Result<(), DomainError> {
     if result.session_id.trim().is_empty() {
         return Err(DomainError::InvalidData(
             "Remote Control session id is required".to_string(),
@@ -219,19 +224,19 @@ fn validate_result(result: &RemoteControlInvokeResult) -> Result<(), DomainError
             "Invalid Remote Control request id".to_string(),
         ));
     }
-    let result_size = match &result.outcome {
-        RemoteControlOutcome::Success(RemoteControlValue::Json(value)) => serde_json::to_vec(value)
-            .map_err(|error| DomainError::InvalidData(error.to_string()))?
-            .len(),
-        RemoteControlOutcome::Success(RemoteControlValue::Bytes(bytes)) => bytes.len(),
-        RemoteControlOutcome::Failure(message) => message.len(),
-    };
-    if result_size > REMOTE_CONTROL_MAX_RESULT_BYTES {
-        return Err(DomainError::InvalidData(
-            "Remote Control response exceeds the allowed size".to_string(),
-        ));
-    }
     Ok(())
+}
+
+fn result_size(result: &RemoteControlInvokeResult) -> Result<usize, DomainError> {
+    match &result.outcome {
+        RemoteControlOutcome::Success(RemoteControlValue::Json(value)) => {
+            Ok(serde_json::to_vec(value)
+                .map_err(|error| DomainError::InvalidData(error.to_string()))?
+                .len())
+        }
+        RemoteControlOutcome::Success(RemoteControlValue::BytesBase64(bytes)) => Ok(bytes.len()),
+        RemoteControlOutcome::Failure(message) => Ok(message.len()),
+    }
 }
 
 #[cfg(test)]
@@ -261,10 +266,11 @@ mod tests {
         let session_id = status.session_id.expect("active session id");
 
         let invoking_service = service.clone();
+        let request_session_id = session_id.clone();
         let invoke = tokio::spawn(async move {
             invoking_service
                 .invoke(RemoteControlInvokeRequest {
-                    session_id: session_id.clone(),
+                    session_id: request_session_id,
                     request_id: "request-1".to_string(),
                     operation:
                         tt_contracts::remote_control::RemoteControlOperation::GetClientVersion,
@@ -299,5 +305,54 @@ mod tests {
             result,
             Ok(RemoteControlValue::Json(value)) if value["version"] == "test"
         ));
+    }
+
+    #[tokio::test]
+    async fn oversized_response_fails_the_waiting_invoke_instead_of_leaking_it_until_timeout() {
+        let (command_sender, mut command_receiver) = mpsc::unbounded_channel();
+        let service = Arc::new(RemoteControlService::new(Arc::new(RecordingPublisher {
+            commands: command_sender,
+        })));
+        let status = service.start_session().await.expect("start session");
+        let session_id = status.session_id.expect("active session id");
+
+        let invoking_service = service.clone();
+        let request_session_id = session_id.clone();
+        let invoke = tokio::spawn(async move {
+            invoking_service
+                .invoke(RemoteControlInvokeRequest {
+                    session_id: request_session_id,
+                    request_id: "request-large".to_string(),
+                    operation:
+                        tt_contracts::remote_control::RemoteControlOperation::GetClientVersion,
+                })
+                .await
+        });
+        let _command = command_receiver
+            .recv()
+            .await
+            .expect("desktop invoke command");
+        service
+            .publish_result(RemoteControlInvokeResult {
+                session_id,
+                request_id: "request-large".to_string(),
+                outcome: RemoteControlOutcome::Success(RemoteControlValue::Json(
+                    serde_json::json!({
+                        "payload": "x".repeat(REMOTE_CONTROL_MAX_RESULT_BYTES + 1)
+                    }),
+                )),
+            })
+            .await
+            .expect("oversized response is returned as a command error");
+
+        let error = invoke
+            .await
+            .expect("invoke task")
+            .expect_err("oversized response must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("Remote Control response exceeds")
+        );
     }
 }

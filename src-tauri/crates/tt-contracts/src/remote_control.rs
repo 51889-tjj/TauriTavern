@@ -3,7 +3,7 @@ use serde_json::Value;
 
 pub const REMOTE_CONTROL_MAX_REQUEST_ID_CHARS: usize = 128;
 pub const REMOTE_CONTROL_MAX_OPERATION_BYTES: usize = 256 * 1024;
-pub const REMOTE_CONTROL_MAX_RESULT_BYTES: usize = 4 * 1024 * 1024;
+pub const REMOTE_CONTROL_MAX_RESULT_BYTES: usize = 8 * 1024 * 1024;
 pub const REMOTE_CONTROL_MAX_PENDING_REQUESTS: usize = 16;
 pub const REMOTE_CONTROL_REQUEST_TIMEOUT_SECS: u64 = 60;
 
@@ -117,7 +117,7 @@ pub struct RemoteControlInvokeRequest {
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum RemoteControlValue {
     Json(Value),
-    Bytes(Vec<u8>),
+    BytesBase64(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +173,11 @@ mod tests {
             serde_json::to_value(RemoteControlOperation::GetTauriTavernSettings)
                 .expect("serialize TauriTavern settings read")["kind"],
             "get_tauri_tavern_settings"
+        );
+        assert_eq!(
+            serde_json::to_value(RemoteControlValue::BytesBase64("AQID".to_string()))
+                .expect("serialize byte response")["kind"],
+            "bytes_base64"
         );
 
         let unsupported = serde_json::from_value::<RemoteControlOperation>(serde_json::json!({
