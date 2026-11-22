@@ -26,7 +26,7 @@ async function invokeOperation(operation, { safeInvoke, invokeTransport }) {
             return safeInvoke('backend_error_bridge_ready');
         case 'get_client_version':
             return safeInvoke('get_client_version');
-        case 'get_tauritavern_settings':
+        case 'get_tauri_tavern_settings':
             return safeInvoke('get_tauritavern_settings');
         case 'update_tauri_tavern_settings':
             return safeInvoke('update_tauritavern_settings', { dto: operation.dto });
@@ -105,7 +105,9 @@ async function invokeOperation(operation, { safeInvoke, invokeTransport }) {
                 sessionId: operation.sessionId,
             });
         default:
-            throw new Error('Remote Control received an unsupported operation');
+            throw new Error(
+                `Remote Control received an unsupported operation: ${String(operation?.kind ?? 'unknown')}`,
+            );
     }
 }
 

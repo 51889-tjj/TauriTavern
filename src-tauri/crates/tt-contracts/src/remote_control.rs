@@ -169,6 +169,11 @@ mod tests {
                 .expect("serialize settings read")["kind"],
             "get_sillytavern_settings"
         );
+        assert_eq!(
+            serde_json::to_value(RemoteControlOperation::GetTauriTavernSettings)
+                .expect("serialize TauriTavern settings read")["kind"],
+            "get_tauri_tavern_settings"
+        );
 
         let unsupported = serde_json::from_value::<RemoteControlOperation>(serde_json::json!({
             "kind": "execute_arbitrary_command",
