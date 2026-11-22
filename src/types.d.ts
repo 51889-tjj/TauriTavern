@@ -1452,10 +1452,18 @@ type TauriTavernRemoteChatMessage = {
     sentAt: string;
 };
 
+type TauriTavernChatPayloadCursor = {
+    offset: number;
+    size: number;
+    modifiedMillis: number;
+};
+
 type TauriTavernRemoteChatHistory = {
     target: TauriTavernRemoteChatTarget;
     title: string;
     messages: TauriTavernRemoteChatMessage[];
+    cursor: TauriTavernChatPayloadCursor;
+    hasMoreBefore: boolean;
     generationActive: boolean;
     latestSequence: number;
 };
@@ -1495,6 +1503,7 @@ type TauriTavernRemoteChatApi = {
             deviceId: string,
             sessionId: string,
             target: TauriTavernRemoteChatTarget,
+            beforeCursor?: TauriTavernChatPayloadCursor,
         ) => Promise<TauriTavernRemoteChatHistory>;
         submit: (
             deviceId: string,

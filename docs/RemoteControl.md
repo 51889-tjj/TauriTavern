@@ -1,52 +1,55 @@
-# Remote Control（手机前端、电脑主机）
+# Remote Control（专用手机控制台、电脑主机）
 
 ## 目标
 
-让 iPhone 使用完整的 TauriTavern 移动前端，远程操作正在运行的桌面 TauriTavern。手机界面不缩减成聊天面板：连接后，各设置页、角色/聊天视图和控件都读取电脑当前状态；手机上的修改直接由电脑执行并保存，桌面随后看到同一结果。手机只保留配对凭据、界面代码和临时会话状态，不建立第二份用户数据。
+独立 iOS App 提供专为手机设计的 TauriTavern 控制界面，不加载完整 SillyTavern 桌面前端，也不镜像电脑屏幕。角色、聊天、模型连接、扩展和设置仍由电脑持有与执行；手机只为当前页面临时读取需要的数据，不建立本地用户数据副本。
 
-独立 iOS App 已从 Remote Chat 单页迁移为打包 `src/index.html` 的完整移动前端。启动时先显示配对/连接门；连接成功后，前端通过配对设备的 TLS 固定会话操作电脑。
+壳继续使用独立 Bundle ID `com.tauritavern.remotechat`。配对、TLS/SPKI 证书固定和签名会话仍由 Remote Control shell 与 LAN Sync 提供。连接门通过后，`remote-control.html` 启动独立 React 移动应用；`src/index.html` 仍只服务 TauriTavern 主应用。
 
-当前第一条远程控制闭环覆盖 TauriTavern / SillyTavern 设置读取与写入、设置分块提交、Persona、脱敏密钥状态与密钥写入/删除、LLM 连接 CRUD、主题、Quick Reply、模型预设，以及角色/群组目录、最近聊天和只读聊天历史。主机只执行显式列入 `RemoteControlOperation` 的操作。第三方扩展静态资源通过受限的原生资源协议读取；聊天与扩展资源使用独立、有大小上限的二进制通道。聊天写入、用户数据资源、完整生成与扩展/Agent/MCP 操作仍未接通，不能据此称为全功能验收完成。
+## 当前移动界面范围
 
-当前操作枚举具体允许启动就绪状态、版本与启动 metadata、背景目录/metadata 列表、设置读写/提交、Persona、扩展目录与内置模板读取、角色/群组目录、最近聊天摘要、活动 Agent Run 列表、密钥状态/写入/删除、LLM 连接读写、模型连接状态、主题、Quick Reply 与预设读写。完整 SillyTavern 设置和只读聊天历史使用独立、有大小上限的二进制路由（分别为 32 MiB 与 64 MiB）。第三方扩展文件只通过桌面 Host Resource Service 的 `/scripts/extensions/third-party/*` 文件级读取语义传输，单个资源上限 32 MiB；不开放任意文件路径或 HTTP 代理。枚举外的命令（包括生成、文件、角色/聊天写入和系统插件调用）会明确拒绝；头像、背景等用户资源仍未传输。
-
-## 现状与边界
-
-- 主机注册了约 375 个 Tauri command 入口；它们覆盖设置、模型连接、角色/群组、聊天、世界书、资源、扩展、Agent、MCP、数据库、导入导出和系统能力。
-- 现有 Web Host 只支持浏览器启动、聊天读写和 Replay 生成等有限路径；它把许多设置保存在嵌入方自己的 `store`，且明确拒绝 Agent、MCP、同步、文件选择等操作，因此不能直接当作全功能远程主机。
-- Remote Chat LAN API 提供聊天状态、目录、历史、消息、事件和停止端点；Remote Control 新增独立状态与受限 invoke 端点。远程聊天生成仍由当前桌面 WebView 运行 SillyTavern 发送流程；这条数据和控制路径应继续保持唯一。
-- 不能把所有 Tauri command 名称和参数不加限制地转发到 LAN。远程操作必须经过主机授权策略；任意命令、任意文件路径和任意代码执行不属于远程控制 API。
-
-## 目标结构
-
-1. 独立 iOS App 继续使用轻量原生壳，不链接完整 `tauritavern` host。
-2. 手机加载 TauriTavern 已有的移动前端及其完整导航/控件。前端发出的操作经独立 Remote Control 客户端转到电脑，不在手机实现一套平行业务逻辑。
-3. 电脑复用 LAN Sync 的配对身份、HTTPS、SPKI pin 和签名会话；桌面用户显式启用远程控制会话并可随时撤销。
-4. 桌面端在本机执行受允许的应用服务或 Tauri command；返回值、事件、流式文本和文件资源按各自 DTO/传输协议回到手机。
-5. 远程写入只修改电脑数据目录。配置密钥可从手机提交到电脑保存，但读取时保持脱敏；桌面文件选择、更新安装等系统对话框仍在电脑端完成。
-
-## 能力分层
-
-| 阶段 | 能力 | 行为归属 |
+| 页面 | 当前行为 | 数据与执行位置 |
 | --- | --- | --- |
-| 1 | TauriTavern / SillyTavern 设置、LLM 连接、提示词与 Persona、主题和 Quick Reply | 电脑读写；手机显示远程结果 |
-| 2 | 角色卡、群组、聊天记录、世界书、备份、搜索与资源 | 电脑拥有数据；文件和二进制资源走受限传输 |
-| 3 | 扩展管理、Agent、Skills、MCP、数据库与高级工具 | 每个操作单独定义授权、进度和错误语义 |
-| 4 | 导入导出、系统文件选择器、通知、更新与桌面专属能力 | 在电脑执行；需要系统确认时显示于电脑 |
+| 聊天 | 复用 Remote Chat 浏览角色/群组与聊天、读取最近历史、发送文本、停止生成 | Remote Chat 服务在电脑执行生成；手机只暂存当前会话视图 |
+| 扩展 | 查看电脑上的扩展，安装第三方仓库，更新、删除并启用/停用本地或全局第三方扩展 | 电脑下载、执行、保存并管理代码；手机不下载或执行扩展代码 |
+| 模型 / API | 读取和修改当前 Chat Completion 提供商、模型、自定义地址、反代地址；写入或删除电脑 API Key；管理 TauriTavern LLM Connection | 桌面前端复用现有 Chat Completion 控件与密钥存储；连接 DTO 按需读写 |
+| 设置 | 按分类读取并提交生成、界面，以及 TauriTavern 自有设置：聊天、备份、外观、网络、隐私、模型和 Agent 历史保留 | 每次只把当前分类需要的字段返回手机；电脑端完成校验与持久化 |
 
-阶段 1 已开始实现；接入点是完整原有移动 UI 的 `tauri-bridge.js`，不是在 Remote Chat 页面继续堆配置按钮。桌面端通过「扩展菜单 → Remote Chat → 作为主机 → Remote Control」显式启用会话。后续阶段按同一 Remote Control 会话和能力策略扩展。
+聊天仍需电脑显式开启 Remote Chat；设置、扩展和模型/API 操作需电脑显式开启 Remote Control。配对本身不会开启任一会话。远程控制页面不会调用完整 SillyTavern 设置快照接口 `get_sillytavern_settings`。
 
-## 安全与数据不变量
+## 不变量与安全边界
 
-- 只接受已配对设备的 TLS 固定、签名会话；远程控制会话默认关闭。
-- 主机使用按能力划分的默认拒绝策略；高影响或破坏性操作保留桌面确认或明确授权。
-- 不提供通用 HTTP 代理、任意 Tauri invoke、任意文件路径访问或脚本执行端点。
-- 手机离线时没有电脑数据可访问；关闭会话、撤销设备或停止 LAN 服务后立即拒绝后续操作。
-- 所有远程设置/数据读写与桌面路径汇合到同一应用服务、仓储和数据目录，不添加客户端副本或同步冲突解决层。
+- LAN Sync 配对身份、HTTPS、SPKI 固定和签名会话是连接基础；Remote Control 默认关闭，电脑用户可随时结束会话。
+- 手机只调用 `RemoteControlOperation` 显式列出的操作，不开放任意 Tauri invoke、HTTP 代理、文件路径或脚本执行。
+- API Key 值不从电脑读取。手机输入的密钥只经已固定的连接发送给电脑，并由电脑现有 secret API 保存；手机 UI 不写入 `localStorage` 或其他持久缓存。
+- 聊天历史和页面 DTO 只在当前 React 页面状态中短暂存在。离开页面或关闭 App 后不保存为手机数据。
+- 扩展管理只针对 Local / Global 第三方扩展，系统扩展不可远程修改。安装由电脑执行并保留电脑端第三方扩展确认；更新与启用/停用后按页面提示重载电脑界面。删除不默认运行清理 Hook。
+- 配对撤销、Remote Control 会话关闭或 LAN 服务停止后，后续请求必须失败；未知操作和无效 DTO 明确报错。
 
-## 验收方向
+## 数据与控制流
 
-- 连接后手机显示电脑当前配置；手机修改设置或模型连接后，桌面端看到同一结果，重启电脑后仍存在于原数据目录。
-- 手机 UI 能读取角色、聊天和设置的电脑端事实；应用重启不恢复本地缓存的用户数据。
-- 不允许的命令/能力、失效会话和错误 DTO 明确失败，不降级为本地副本。
-- 文件、事件和流式输出有尺寸、权限、取消和超时边界；高影响操作按桌面授权策略执行。
+```text
+remote-control.html
+  -> pairing gate (local shell)
+  -> dedicated mobile React UI
+      -> typed Remote Control operation
+      -> paired LAN HTTPS + certificate pinning
+      -> desktop Remote Control bridge
+      -> existing desktop command / SillyTavern action
+      -> computer-owned storage and runtime
+```
+
+聊天继续使用独立 Remote Chat API，而不是在 Remote Control 中重做生成：电脑通过现有 SillyTavern 发送/生成路径执行，手机读取有限历史和有序 token 事件。Remote Control 的设置查询在电脑端按页面投影；完整设置对象不会跨 LAN 发送。
+
+## 尚未覆盖
+
+当前界面是第一条专用移动控制闭环，不等于完整远程版 TauriTavern。尚未覆盖扩展分支管理与数据清理、更多 SillyTavern 设置、角色/聊天写入、附件与媒体、Agent/MCP 管理以及桌面系统对话框；后续能力仍需各自定义受限操作与页面 DTO。禁止为了复用桌面 UI 而重新加载完整 `src/index.html` 或把完整设置快照放到手机。
+
+Remote Chat 历史按最多 100 条消息分页：首次打开读取尾页，用户点击“加载更早的消息”后才请求上一页。游标由电脑校验；聊天文件改变导致游标失效时，请求明确失败，不退回读取完整聊天 JSON。
+
+## 构建与验收
+
+- Windows 桌面安装包：在仓库根目录运行 `pnpm run tauri:build`。构建只写入 `src-tauri/target/`。
+- TrollStore IPA：Codemagic 的 `remote-chat-shell-ios-trollstore` workflow（定义于 `codemagic.yaml`）使用 macOS runner 构建独立 iOS Remote Control shell。
+- 真机验收需先在电脑 LAN Sync 中配对并批准手机；按页面分别开启 Remote Control 与 Remote Chat。
+- 验收重点：连接后只启动移动专用页面；当前页面读取到的数据来自电脑；修改后电脑状态/存储发生变化；手机重启后不恢复用户数据；失效会话和未允许操作明确失败。

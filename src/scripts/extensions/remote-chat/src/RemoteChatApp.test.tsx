@@ -12,7 +12,9 @@ test('paired phone selects a desktop chat, sends text, and displays its reply', 
         target: TauriTavernRemoteChatTarget;
         text: string;
     }> = [];
+    const historyCursors: Array<TauriTavernChatPayloadCursor | undefined> = [];
     let readCount = 0;
+    const recentCursor = { offset: 100, size: 200, modifiedMillis: 1 };
     const target: TauriTavernRemoteChatTarget = {
         kind: 'character',
         characterName: 'alice',
@@ -49,36 +51,66 @@ test('paired phone selects a desktop chat, sends text, and displays its reply', 
                 messageCount: 1,
                 updatedAtMs: 1,
             }]),
-            getHistory: () => Promise.resolve(submitted.length
-                ? {
-                    target,
-                    title: 'First conversation',
-                    messages: [
-                        {
-                            name: 'User',
-                            isUser: true,
-                            isSystem: false,
-                            text: 'Hello from my phone',
-                            sentAt: '2026-11-21',
-                        },
-                        {
+            getHistory: (_deviceId, _sessionId, _target, beforeCursor) => {
+                historyCursors.push(beforeCursor);
+                if (beforeCursor) {
+                    return Promise.resolve({
+                        target,
+                        title: 'First conversation',
+                        messages: [{
                             name: 'Alice',
                             isUser: false,
                             isSystem: false,
-                            text: 'The desktop reply',
-                            sentAt: '2026-11-21',
-                        },
-                    ],
-                    generationActive: false,
-                    latestSequence: 2,
+                            text: 'Earlier archived message',
+                            sentAt: '2026-11-20',
+                        }],
+                        cursor: { offset: 0, size: 200, modifiedMillis: 1 },
+                        hasMoreBefore: false,
+                        generationActive: false,
+                        latestSequence: 0,
+                    });
                 }
-                : {
-                    target,
-                    title: 'First conversation',
-                    messages: [],
-                    generationActive: false,
-                    latestSequence: 0,
-                }),
+                return Promise.resolve(submitted.length
+                    ? {
+                        target,
+                        title: 'First conversation',
+                        messages: [
+                            {
+                                name: 'User',
+                                isUser: true,
+                                isSystem: false,
+                                text: 'Hello from my phone',
+                                sentAt: '2026-11-21',
+                            },
+                            {
+                                name: 'Alice',
+                                isUser: false,
+                                isSystem: false,
+                                text: 'The desktop reply',
+                                sentAt: '2026-11-21',
+                            },
+                        ],
+                        cursor: { offset: 100, size: 200, modifiedMillis: 1 },
+                        hasMoreBefore: false,
+                        generationActive: false,
+                        latestSequence: 2,
+                    }
+                    : {
+                        target,
+                        title: 'First conversation',
+                        messages: [{
+                            name: 'Alice',
+                            isUser: false,
+                            isSystem: false,
+                            text: 'Most recent message',
+                            sentAt: '2026-11-21',
+                        }],
+                        cursor: recentCursor,
+                        hasMoreBefore: true,
+                        generationActive: false,
+                        latestSequence: 0,
+                    });
+            },
             submit: (_deviceId, _sessionId, request) => {
                 submitted.push(request);
                 return Promise.resolve({ requestId: request.requestId, accepted: true });
@@ -119,6 +151,14 @@ test('paired phone selects a desktop chat, sends text, and displays its reply', 
     await user.click(await screen.findByRole('button', { name: /My PC/ }));
     await user.click(await screen.findByRole('button', { name: 'Alice' }));
     await user.click(await screen.findByRole('button', { name: /First conversation/ }));
+    await user.click(screen.getByRole('button', { name: 'loadOlder' }));
+    await screen.findByText('Earlier archived message');
+    expect(historyCursors[1]).toEqual(recentCursor);
+    expect(screen.getAllByRole('article').map(message => message.textContent?.trim())).toEqual([
+        'AliceEarlier archived message',
+        'AliceMost recent message',
+    ]);
+
     await user.type(screen.getByRole('textbox', { name: 'messagePlaceholder' }), 'Hello from my phone');
     await user.click(screen.getByRole('button', { name: 'send' }));
 

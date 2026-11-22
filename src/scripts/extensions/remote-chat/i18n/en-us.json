@@ -15,6 +15,7 @@
     "remote_chat.characters": "Characters",
     "remote_chat.groups": "Groups",
     "remote_chat.chooseChat": "Choose a chat",
+    "remote_chat.loadOlder": "Load earlier messages",
     "remote_chat.back": "Back",
     "remote_chat.send": "Send",
     "remote_chat.stop": "Stop",

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::chat::ChatPayloadCursor;
+
 pub const REMOTE_CHAT_MAX_INPUT_CHARS: usize = 16_000;
 pub const REMOTE_CHAT_MAX_HISTORY_MESSAGES: usize = 100;
 
@@ -81,6 +83,10 @@ pub struct RemoteChatHistory {
     pub target: RemoteChatTarget,
     pub title: String,
     pub messages: Vec<RemoteChatMessage>,
+    /// Use this cursor to request the next page before the current messages.
+    pub cursor: ChatPayloadCursor,
+    /// Whether the desktop has older messages before this page.
+    pub has_more_before: bool,
     pub generation_active: bool,
     pub latest_sequence: u64,
 }
@@ -120,6 +126,9 @@ pub struct RemoteChatChatsRequest {
 pub struct RemoteChatHistoryRequest {
     pub session_id: String,
     pub target: RemoteChatTarget,
+    /// Omitted for the initial tail page; otherwise returns lines before this cursor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_cursor: Option<ChatPayloadCursor>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,6 +227,20 @@ mod tests {
             serde_json::from_value::<RemoteChatTarget>(target_value).expect("deserialize target"),
             target
         );
+
+        let history_request = RemoteChatHistoryRequest {
+            session_id: "session-1".to_string(),
+            target: target.clone(),
+            before_cursor: Some(ChatPayloadCursor {
+                offset: 128,
+                size: 1024,
+                modified_millis: 42,
+            }),
+        };
+        let request_value =
+            serde_json::to_value(history_request).expect("serialize paged history request");
+        assert_eq!(request_value["beforeCursor"]["offset"], 128);
+        assert_eq!(request_value["beforeCursor"]["modifiedMillis"], 42);
 
         let event = RemoteChatEvent {
             sequence: 4,

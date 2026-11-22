@@ -63,20 +63,6 @@ const GATE_STYLE = `
     }
     .tt-remote-gate__error { color: #ff9b9b !important; overflow-wrap: anywhere; }
     .tt-remote-gate__hint { font-size: 13px; }
-    .tt-remote-connection {
-        position: fixed;
-        z-index: 2147482000;
-        top: max(8px, env(safe-area-inset-top));
-        right: 10px;
-        max-width: 48vw;
-        border: 1px solid #7771;
-        border-radius: 999px;
-        padding: 6px 11px;
-        color: #fff;
-        background: #24242be8;
-        box-shadow: 0 2px 10px #0006;
-        font: 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
 `;
 
 function element(tag, className, text) {
@@ -98,24 +84,9 @@ function isDesktop(device) {
     return ['windows', 'macos', 'linux'].includes(devicePlatform(device));
 }
 
-function installConnectionIndicator(deviceName, deviceId) {
-    const button = element('button', 'tt-remote-connection', `电脑：${deviceName} · 断开`);
-    button.type = 'button';
-    button.title = '断开远程电脑连接';
-    button.addEventListener('click', async () => {
-        if (!window.confirm(`断开与“${deviceName}”的连接？`)) {
-            return;
-        }
-        try {
-            await invoke('remote_control_client_disconnect', { deviceId });
-        } finally {
-            delete window.__TAURITAVERN_REMOTE_CONTROL__;
-            window.location.reload();
-        }
-    });
-    document.body.append(button);
-}
-
+/**
+ * @param {(device: { deviceId: string, deviceName: string, platform: string }) => void} onConnect
+ */
 function showGate(onConnect) {
     const style = element('style');
     style.textContent = GATE_STYLE;
@@ -141,7 +112,7 @@ function showGate(onConnect) {
         card.append(
             element('div', 'tt-remote-gate__brand', 'TAURITAVERN · REMOTE'),
             element('h1', '', '连接电脑'),
-            element('p', '', '连接后显示电脑上的 TauriTavern 界面与配置。设置和操作都由电脑执行并保存，手机不保存第二份角色、聊天或配置数据。'),
+            element('p', '', '手机只显示专为移动端设计的控制界面。聊天由电脑上的 Remote Chat 处理；设置和扩展操作由电脑执行并保存。'),
         );
 
         const devices = element('div', 'tt-remote-gate__devices');
@@ -160,7 +131,7 @@ function showGate(onConnect) {
 
         const pairForm = element('div', 'tt-remote-gate__pair');
         pairForm.hidden = true;
-        const instructions = element('p', 'tt-remote-gate__hint', '先在电脑「设置 → 同步 → 局域网同步」启动服务并显示配对二维码；电脑上需要确认配对请求。连接远程控制时，还要在「扩展菜单 → Remote Chat → 作为主机」中开启 Remote Control。');
+        const instructions = element('p', 'tt-remote-gate__hint', '先在电脑「设置 → 同步 → 局域网同步」启动服务并显示配对二维码；电脑上需要确认配对请求。连接后，设置与扩展操作需要电脑开启 Remote Control；聊天还需要开启 Remote Chat。');
         const scanButton = element('button', 'tt-remote-gate__button', '扫描二维码');
         scanButton.type = 'button';
         scanButton.addEventListener('click', () => void scanQrCode());
@@ -270,8 +241,11 @@ function showGate(onConnect) {
                 }),
             });
             root.remove();
-            installConnectionIndicator(device.device_name || device.device_id, device.device_id);
-            onConnect();
+            onConnect({
+                deviceId: device.device_id,
+                deviceName: device.device_name || device.device_id,
+                platform: device.platform || '',
+            });
         } catch (error) {
             showError(error instanceof Error ? error.message : String(error));
             button.disabled = false;
@@ -283,9 +257,12 @@ function showGate(onConnect) {
     });
 }
 
+/**
+ * @returns {Promise<{ deviceId: string, deviceName: string, platform: string }>}
+ */
 export function waitForRemoteShellConnection() {
     if (window.__TAURITAVERN_REMOTE_SHELL__ !== true) {
-        return Promise.resolve();
+        return Promise.reject(new Error('Remote Control shell marker is missing'));
     }
     if (!isMobileHost()) {
         return Promise.reject(new Error('Remote Control shell requires a mobile host identity'));

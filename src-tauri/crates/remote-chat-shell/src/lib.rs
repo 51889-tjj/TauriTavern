@@ -21,17 +21,6 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
 
     builder
-        .register_asynchronous_uri_scheme_protocol(
-            "tt-remote",
-            move |context, request, responder| {
-                let app_handle = context.app_handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let response =
-                        crate::app::remote_resource_protocol::handle(&app_handle, request).await;
-                    responder.respond(response);
-                });
-            },
-        )
         .setup(|app| {
             let data_dir = app.path().app_local_data_dir()?;
             app.manage(Arc::new(build_services(data_dir)));
@@ -54,8 +43,6 @@ pub fn run() {
             commands::remote_control_client_disconnect,
             commands::remote_control_client_status,
             commands::remote_control_client_invoke,
-            commands::remote_control_client_get_sillytavern_settings,
-            commands::remote_control_client_get_chat_payload,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run TauriTavern Remote");

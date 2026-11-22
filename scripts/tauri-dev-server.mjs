@@ -89,7 +89,7 @@ function contentType(filePath) {
 
 function isReloadEntryDocument(filePath) {
     const relativePath = path.relative(frontendRoot, filePath).split(path.sep).join('/');
-    return relativePath === 'index.html';
+    return relativePath === 'index.html' || relativePath === 'remote-control.html';
 }
 
 async function resolveStaticFile(requestUrl) {
@@ -142,10 +142,14 @@ function injectDevRuntime(filePath, data) {
     }
 
     const html = data.toString('utf8');
-    const headTag = '<head>';
-    const headIndex = html.toLowerCase().indexOf(headTag);
-    const bootstrapIndex = headIndex === -1 ? 0 : headIndex + headTag.length;
-    const bootstrappedHtml = `${html.slice(0, bootstrapIndex)}${devServiceWorkerBootstrap}${html.slice(bootstrapIndex)}`;
+    const relativePath = path.relative(frontendRoot, filePath).split(path.sep).join('/');
+    let bootstrappedHtml = html;
+    if (relativePath === 'index.html') {
+        const headTag = '<head>';
+        const headIndex = html.toLowerCase().indexOf(headTag);
+        const bootstrapIndex = headIndex === -1 ? 0 : headIndex + headTag.length;
+        bootstrappedHtml = `${html.slice(0, bootstrapIndex)}${devServiceWorkerBootstrap}${html.slice(bootstrapIndex)}`;
+    }
     const bodyIndex = bootstrappedHtml.toLowerCase().lastIndexOf('</body>');
     if (bodyIndex === -1) {
         return Buffer.from(`${bootstrappedHtml}${reloadClientScript}`);

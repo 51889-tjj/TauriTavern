@@ -53,6 +53,7 @@
   - 宿主身份：宿主在页面脚本运行前写入 TT 页面的 `window`，对象冻结。原生应用中由 Rust 按编译目标生成。
   - `platform`：`'windows' | 'macos' | 'linux' | 'android' | 'ios' | 'ohos'`；`kind`：`'desktop' | 'mobile'`，与 Rust 的 `desktop` / `mobile` 编译条件同源。
   - 第一方代码只通过 `src/scripts/util/host-identity.js` 读取，见 `docs/FrontendGuide.md` §2.1。
+- 独立 iOS Remote Control shell 加载 `remote-control.html`，不安装完整 SillyTavern Host ABI，也不启动 `src/init.js`；它只使用配对门与受限远程操作，见 [Remote Control](RemoteControl.md)。上面的完整前端启动信号不构成该专用页面的初始化依赖。
 
 ---
 

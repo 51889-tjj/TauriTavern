@@ -571,8 +571,7 @@ mod tests {
                 .invoke(RemoteControlInvokeRequest {
                     session_id: request_session_id,
                     request_id: "request-1".to_string(),
-                    operation:
-                        tt_contracts::remote_control::RemoteControlOperation::GetClientVersion,
+                    operation: tt_contracts::remote_control::RemoteControlOperation::GetExtensions,
                 })
                 .await
         });
@@ -702,8 +701,7 @@ mod tests {
                 .invoke(RemoteControlInvokeRequest {
                     session_id: request_session_id,
                     request_id: "request-large".to_string(),
-                    operation:
-                        tt_contracts::remote_control::RemoteControlOperation::GetClientVersion,
+                    operation: tt_contracts::remote_control::RemoteControlOperation::GetExtensions,
                 })
                 .await
         });

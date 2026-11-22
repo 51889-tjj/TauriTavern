@@ -275,7 +275,6 @@ export function bootstrapTauriMain() {
     const remoteControlHostBootstrap = installRemoteControlApi(context);
     void installRemoteControlDesktopBridge({
         safeInvoke: context.safeInvoke,
-        invokeTransport: context.invokeTransport,
         getSessionId: remoteControlHostBootstrap.getSessionId,
         markSessionStarted: remoteControlHostBootstrap.markSessionStarted,
         markSessionEnded: remoteControlHostBootstrap.markSessionEnded,

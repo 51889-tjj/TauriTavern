@@ -419,7 +419,7 @@ async fn handle_remote_chat_history(
     authenticate_remote_session(&state, &headers).await?;
     state
         .remote_chat
-        .get_history(&request.session_id, request.target)
+        .get_history(&request.session_id, request.target, request.before_cursor)
         .await
         .map(Json)
         .map_err(ApiError::from)
@@ -807,6 +807,7 @@ mod tests {
             &self,
             _session_id: &str,
             _target: tt_contracts::remote_chat::RemoteChatTarget,
+            _before_cursor: Option<tt_contracts::chat::ChatPayloadCursor>,
         ) -> Result<tt_contracts::remote_chat::RemoteChatHistory, DomainError> {
             Err(DomainError::NotFound("Remote Chat history".to_string()))
         }

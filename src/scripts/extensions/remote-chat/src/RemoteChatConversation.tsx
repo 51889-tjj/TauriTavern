@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+
 import type { RemoteChatMessageKey } from './host';
 
 type Message = TauriTavernRemoteChatMessage & { key: string };
@@ -6,6 +8,8 @@ type Translator = (key: RemoteChatMessageKey) => string;
 type Props = {
     title: string;
     messages: Message[];
+    hasOlderHistory: boolean;
+    loadingOlderHistory: boolean;
     draft: string;
     active: boolean;
     busy: boolean;
@@ -14,12 +18,15 @@ type Props = {
     onDisconnect: () => void;
     onSend: () => void;
     onStop: () => void;
+    onLoadOlder: () => void;
     tr: Translator;
 };
 
 export function RemoteChatConversation({
     title,
     messages,
+    hasOlderHistory,
+    loadingOlderHistory,
     draft,
     active,
     busy,
@@ -28,8 +35,19 @@ export function RemoteChatConversation({
     onDisconnect,
     onSend,
     onStop,
+    onLoadOlder,
     tr,
 }: Props) {
+    const messagesElement = useRef<HTMLDivElement>(null);
+    const lastMessage = messages[messages.length - 1];
+
+    useEffect(() => {
+        const element = messagesElement.current;
+        if (element) {
+            element.scrollTop = element.scrollHeight;
+        }
+    }, [lastMessage?.key, lastMessage?.text]);
+
     return (
         <div className="tt-remote-chat__conversation">
             <div className="tt-remote-chat__conversation-header">
@@ -46,7 +64,17 @@ export function RemoteChatConversation({
                     {tr('disconnect')}
                 </button>
             </div>
-            <div className="tt-remote-chat__messages" aria-live="polite">
+            {hasOlderHistory && (
+                <button
+                    type="button"
+                    className="tt-remote-chat__load-older"
+                    disabled={loadingOlderHistory || active}
+                    onClick={onLoadOlder}
+                >
+                    {loadingOlderHistory ? tr('loading') : tr('loadOlder')}
+                </button>
+            )}
+            <div ref={messagesElement} className="tt-remote-chat__messages" aria-live="polite">
                 {messages.map(message => (
                     <article
                         className={`tt-remote-chat__message${message.isUser ? ' is-user' : ''}${message.isSystem ? ' is-system' : ''}`}

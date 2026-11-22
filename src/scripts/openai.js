@@ -22,6 +22,7 @@ import {
     name1,
     name2,
     resultCheckStatus,
+    saveSettings,
     saveSettingsDebounced,
     setOnlineStatus,
     startStatusLoading,
@@ -53,7 +54,15 @@ import {
 } from './prompt-injections.js';
 
 import { forceCharacterEditorTokenize, getCustomStoppingStrings, persona_description_positions, power_user } from './power-user.js';
-import { readSecretState, resolveSecretKey, SECRET_KEYS, secret_state, writeSecret } from './secrets.js';
+import {
+    deleteSecret,
+    readSecretState,
+    resolveChatCompletionSecretKey,
+    resolveSecretKey,
+    SECRET_KEYS,
+    secret_state,
+    writeSecret,
+} from './secrets.js';
 
 import { getEventSourceStream } from './sse-stream.js';
 import { getCustomEndpointPreview } from './tauritavern/custom-endpoint.js';
@@ -265,6 +274,156 @@ export function getChatCompletionModelControl(source = oai_settings.chat_complet
     const sourceKey = String(source || '');
     const control = chatCompletionModelControls[sourceKey];
     return control ? { source: sourceKey, ...control } : null;
+}
+
+/**
+ * Return only the Chat Completion fields needed by the standalone Remote Control model page.
+ * API key values remain in the desktop secret store and never enter this DTO.
+ */
+export async function getRemoteChatCompletionSettings(source = oai_settings.chat_completion_source) {
+    const selectedSource = String(source || '').trim();
+    const sources = Object.values(chat_completion_sources);
+    if (!sources.includes(selectedSource)) {
+        throw new Error(`Unsupported Chat Completion source: ${selectedSource}`);
+    }
+
+    await readSecretState();
+    const modelControl = getChatCompletionModelControl(selectedSource);
+    const secretKey = resolveChatCompletionSecretKey(
+        selectedSource,
+        oai_settings.vertexai_auth_mode,
+    );
+    const secrets = secretKey ? secret_state[secretKey] : null;
+
+    return {
+        source: selectedSource,
+        sources: sources.map(value => ({
+            value,
+            label: getChatCompletionModelControl(value)?.label ?? value,
+        })),
+        customApiFormat: String(oai_settings.custom_api_format || custom_api_formats.OPENAI_COMPAT),
+        customApiFormats: Object.values(custom_api_formats),
+        model: modelControl ? String(oai_settings[modelControl.settingKey] ?? '') : '',
+        supportsCustomModels: modelControl?.supportsCustomModels ?? false,
+        customUrl: String(oai_settings.custom_url ?? ''),
+        reverseProxy: String(oai_settings.reverse_proxy ?? ''),
+        apiKeySupported: secretKey !== null,
+        apiKeyConfigured: Array.isArray(secrets) && secrets.length > 0,
+        credentialLabel: selectedSource === chat_completion_sources.VERTEXAI
+            && oai_settings.vertexai_auth_mode === 'full'
+            ? 'Service Account JSON'
+            : 'API Key',
+        chatCompletionActive: main_api === 'openai',
+    };
+}
+
+/**
+ * Apply a narrow Remote Control edit through the existing Chat Completion controls and save path.
+ * @param {{ source?: string; customApiFormat?: string; model?: string; customUrl?: string; reverseProxy?: string }} dto
+ */
+export async function updateRemoteChatCompletionSettings(dto) {
+    if (!dto || typeof dto !== 'object' || Array.isArray(dto)) {
+        throw new Error('Remote Chat Completion settings must be an object');
+    }
+
+    const source = String(dto.source ?? oai_settings.chat_completion_source).trim();
+    if (!Object.values(chat_completion_sources).includes(source)) {
+        throw new Error(`Unsupported Chat Completion source: ${source}`);
+    }
+
+    const customApiFormat = String(dto.customApiFormat ?? oai_settings.custom_api_format);
+    if (!Object.values(custom_api_formats).includes(customApiFormat)) {
+        throw new Error(`Unsupported Custom API format: ${customApiFormat}`);
+    }
+
+    const sourceSelect = document.getElementById('chat_completion_source');
+    if (!(sourceSelect instanceof HTMLSelectElement)) {
+        throw new Error('Chat Completion source selector is unavailable on the computer');
+    }
+    const selectValue = resolveChatCompletionSourceSelectValue({
+        ...oai_settings,
+        chat_completion_source: source,
+        custom_api_format: customApiFormat,
+    });
+    if (!Array.from(sourceSelect.options).some(option => option.value === selectValue)) {
+        throw new Error(`Chat Completion source is unavailable on the computer: ${selectValue}`);
+    }
+    if (sourceSelect.value !== selectValue) {
+        $(sourceSelect).val(selectValue).trigger('change');
+    }
+
+    if (dto.customUrl !== undefined) {
+        const customUrl = document.getElementById('custom_api_url_text');
+        if (!(customUrl instanceof HTMLInputElement)) {
+            throw new Error('Custom API URL control is unavailable on the computer');
+        }
+        $(customUrl).val(String(dto.customUrl)).trigger('input');
+    }
+
+    if (dto.reverseProxy !== undefined) {
+        const reverseProxy = document.getElementById('openai_reverse_proxy');
+        if (!(reverseProxy instanceof HTMLInputElement)) {
+            throw new Error('Reverse proxy control is unavailable on the computer');
+        }
+        $(reverseProxy).val(String(dto.reverseProxy)).trigger('input');
+    }
+
+    const model = typeof dto.model === 'string' ? dto.model.trim() : '';
+    if (model) {
+        const control = getChatCompletionModelControl(source);
+        if (control?.selector === '#custom_model_id') {
+            const customModel = document.getElementById('custom_model_id');
+            if (!(customModel instanceof HTMLInputElement)) {
+                throw new Error('Custom model control is unavailable on the computer');
+            }
+            $(customModel).val(model).trigger('input');
+        } else if (control) {
+            const modelSelect = document.querySelector(control.selector);
+            if (!(modelSelect instanceof HTMLSelectElement)) {
+                throw new Error(`Model control is unavailable on the computer: ${control.selector}`);
+            }
+            if (control.supportsCustomModels) {
+                addAndSelectCustomModelForSource(source, model);
+            } else if (Array.from(modelSelect.options).some(option => option.value === model)) {
+                $(modelSelect).val(model).trigger('change');
+            } else {
+                throw new Error(`Model is not available in the computer's current model list: ${model}`);
+            }
+        }
+    }
+
+    if (!await saveSettings()) {
+        throw new Error('Could not save Chat Completion settings on the computer');
+    }
+    return getRemoteChatCompletionSettings(source);
+}
+
+/** Save an API key directly to the computer's secret store. */
+export async function writeRemoteChatCompletionApiKey(source, value, label) {
+    if (main_api !== 'openai') {
+        throw new Error('Chat Completion API keys can only be changed while Chat Completion is active');
+    }
+    const secretKey = resolveChatCompletionSecretKey(source, oai_settings.vertexai_auth_mode);
+    if (!secretKey) {
+        throw new Error(`No API key field is available for Chat Completion source: ${source}`);
+    }
+    const apiKey = String(value || '').trim();
+    if (!apiKey) {
+        throw new Error('API key cannot be empty');
+    }
+    await writeSecret(secretKey, apiKey, String(label || '').trim() || undefined);
+}
+
+/** Delete the active API key from the computer's secret store. */
+export async function deleteRemoteChatCompletionApiKey(source) {
+    if (main_api !== 'openai') {
+        throw new Error('Chat Completion API keys can only be changed while Chat Completion is active');
+    }
+    const secretKey = resolveChatCompletionSecretKey(source, oai_settings.vertexai_auth_mode);
+    if (!secretKey) {
+        throw new Error(`No API key field is available for Chat Completion source: ${source}`);
+    }
+    await deleteSecret(secretKey);
 }
 
 function getChatCompletionModelControlByElement(element) {

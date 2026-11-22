@@ -7,6 +7,7 @@ export default defineConfig({
     'src/scripts/extensions/in-app-agent/src/**/*.test.{ts,tsx}',
     'src/scripts/extensions/mcp-manager/src/**/*.test.{ts,tsx}',
     'src/scripts/extensions/remote-chat/src/**/*.test.{ts,tsx}',
+    'src/remote-control-app/**/*.test.{ts,tsx}',
     'src/scripts/tauri/setting/**/*.test.{ts,tsx}',
   ],
   testEnvironment: 'happy-dom',

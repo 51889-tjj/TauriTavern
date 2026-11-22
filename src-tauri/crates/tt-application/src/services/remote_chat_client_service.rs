@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
+use tt_contracts::chat::ChatPayloadCursor;
 use tt_contracts::remote_chat::{
     RemoteChatCatalog, RemoteChatEventsPage, RemoteChatHistory, RemoteChatOwner,
     RemoteChatSessionStatus, RemoteChatSubmit, RemoteChatSubmitResponse, RemoteChatSummary,
@@ -94,10 +95,11 @@ impl RemoteChatClientService {
         device_id: &str,
         session_id: &str,
         target: RemoteChatTarget,
+        before_cursor: Option<ChatPayloadCursor>,
     ) -> Result<RemoteChatHistory, DomainError> {
         self.client(device_id)
             .await?
-            .get_history(session_id, target)
+            .get_history(session_id, target, before_cursor)
             .await
     }
 

@@ -8,6 +8,7 @@ use crate::presentation::commands::helpers::{
     ensure_ios_policy_allows, log_command, map_command_error,
 };
 use crate::presentation::errors::CommandError;
+use tt_contracts::chat::ChatPayloadCursor;
 use tt_contracts::host::HostKind;
 use tt_contracts::remote_chat::{
     RemoteChatEvent, RemoteChatEventsPage, RemoteChatHistory, RemoteChatOwner,
@@ -189,13 +190,14 @@ pub async fn remote_chat_client_get_history(
     device_id: String,
     session_id: String,
     target: RemoteChatTarget,
+    before_cursor: Option<ChatPayloadCursor>,
 ) -> Result<RemoteChatHistory, CommandError> {
     log_command("remote_chat_client_get_history");
     ensure_remote_chat_client_allowed(&app_state)?;
     app_state
         .services
         .remote_chat_client_service
-        .get_history(&device_id, &session_id, target)
+        .get_history(&device_id, &session_id, target, before_cursor)
         .await
         .map_err(map_command_error("Failed to read Remote Chat history"))
 }

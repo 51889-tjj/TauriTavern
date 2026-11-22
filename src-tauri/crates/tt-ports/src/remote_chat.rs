@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use std::sync::Arc;
+use tt_contracts::chat::ChatPayloadCursor;
 use tt_contracts::remote_chat::{
     RemoteChatCatalog, RemoteChatEvent, RemoteChatEventsPage, RemoteChatHistory, RemoteChatOwner,
     RemoteChatSessionStatus, RemoteChatSubmit, RemoteChatSubmitResponse, RemoteChatSummary,
@@ -23,6 +24,7 @@ pub trait RemoteChatApi: Send + Sync {
         &self,
         session_id: &str,
         target: RemoteChatTarget,
+        before_cursor: Option<ChatPayloadCursor>,
     ) -> Result<RemoteChatHistory, DomainError>;
     async fn submit(
         &self,
@@ -59,6 +61,7 @@ pub trait RemoteChatClientSession: Send + Sync {
         &self,
         session_id: &str,
         target: RemoteChatTarget,
+        before_cursor: Option<ChatPayloadCursor>,
     ) -> Result<RemoteChatHistory, DomainError>;
     async fn submit(
         &self,

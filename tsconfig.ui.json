@@ -19,6 +19,8 @@
     "src/scripts/extensions/mcp-manager/src/**/*.tsx",
     "src/scripts/extensions/remote-chat/src/**/*.ts",
     "src/scripts/extensions/remote-chat/src/**/*.tsx",
+    "src/remote-control-app/**/*.ts",
+    "src/remote-control-app/**/*.tsx",
     "src/scripts/tauri/setting/**/*.ts",
     "src/scripts/tauri/setting/**/*.tsx"
   ]

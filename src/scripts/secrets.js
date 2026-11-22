@@ -227,22 +227,30 @@ export function resolveSecretKey() {
     }
 
     if (mainApi === 'openai') {
-        if (chatCompletionSource === chat_completion_sources.VERTEXAI) {
-            switch (chatCompletionSettings.vertexai_auth_mode) {
-                case 'express':
-                    return SECRET_KEYS.VERTEXAI;
-                case 'full':
-                    return SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT;
-            }
-        }
-
-        const [key] = Object.entries(chat_completion_sources).find(([, value]) => value === chatCompletionSource) ?? [null];
-        if (key && SECRET_KEYS[key]) {
-            return SECRET_KEYS[key];
-        }
+        return resolveChatCompletionSecretKey(
+            chatCompletionSource,
+            chatCompletionSettings.vertexai_auth_mode,
+        );
     }
 
     return null;
+}
+
+/** Resolve a Chat Completion secret without reading or exposing its value. */
+export function resolveChatCompletionSecretKey(source, vertexAiAuthMode) {
+    if (source === chat_completion_sources.VERTEXAI) {
+        switch (vertexAiAuthMode) {
+            case 'express':
+                return SECRET_KEYS.VERTEXAI;
+            case 'full':
+                return SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT;
+            default:
+                return null;
+        }
+    }
+
+    const [key] = Object.entries(chat_completion_sources).find(([, value]) => value === source) ?? [null];
+    return key ? SECRET_KEYS[key] ?? null : null;
 }
 
 /**

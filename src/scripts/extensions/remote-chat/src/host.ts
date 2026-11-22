@@ -1,3 +1,5 @@
+export { createRequestId } from '../../../util/request-id.js';
+
 const PREFIX = 'remote_chat.';
 
 const DEFAULT_MESSAGES = {
@@ -17,6 +19,7 @@ const DEFAULT_MESSAGES = {
     characters: 'Characters',
     groups: 'Groups',
     chooseChat: 'Choose a chat',
+    loadOlder: 'Load earlier messages',
     back: 'Back',
     send: 'Send',
     stop: 'Stop',

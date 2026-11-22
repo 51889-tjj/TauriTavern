@@ -28,8 +28,10 @@
    - 安装同源窗口下载桥（所有宿主的浏览器式导出 → 原生交付）
    - 安装 Tauri mobile 兼容层（runtime polyfills，仅移动端）
    - 为宿主接管的路由响应注入追踪 header：`x-tauritavern-trace-id`
-   - 安装后端错误桥并等待 `BackendReadiness`
-   - Tauri 就绪后安装窗口快照与窗口背景发布（仅移动端）
+    - 安装后端错误桥并等待 `BackendReadiness`
+    - Tauri 就绪后安装窗口快照与窗口背景发布（仅移动端）
+
+独立 iOS Remote Control shell 不走这条完整前端启动链。它打开 `src/remote-control.html` 和独立 React bundle，经 `mobile-gate.js` 配对后只使用类型化、按页面请求的 Remote Control actions；不加载 `lib.js`、`tauri-main.js`、`script.js` 或桌面 DOM。数据流与当前能力见 [Remote Control](RemoteControl.md)。
 
 ### 2.1 宿主身份
 

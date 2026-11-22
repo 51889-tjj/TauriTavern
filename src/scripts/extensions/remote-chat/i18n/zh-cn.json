@@ -15,6 +15,7 @@
     "remote_chat.characters": "角色",
     "remote_chat.groups": "群组",
     "remote_chat.chooseChat": "选择聊天记录",
+    "remote_chat.loadOlder": "加载更早的消息",
     "remote_chat.back": "返回",
     "remote_chat.send": "发送",
     "remote_chat.stop": "停止生成",

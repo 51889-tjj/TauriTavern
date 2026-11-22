@@ -7,6 +7,7 @@ const OWNED_UI_ROOTS = [
     'src/scripts/extensions/in-app-agent/src',
     'src/scripts/extensions/mcp-manager/src',
     'src/scripts/extensions/remote-chat/src',
+    'src/remote-control-app',
     'src/scripts/tauri/setting',
 ];
 
@@ -16,6 +17,7 @@ const COMPILER_OWNED_ROOTS = [
     'src/scripts/extensions/in-app-agent/src',
     'src/scripts/extensions/mcp-manager/src',
     'src/scripts/extensions/remote-chat/src',
+    'src/remote-control-app',
     'src/scripts/tauri/setting/settings-app',
     'src/scripts/tauri/setting/dev-logs-app',
     'src/scripts/tauri/setting/sync-app',

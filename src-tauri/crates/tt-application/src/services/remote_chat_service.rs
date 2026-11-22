@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::sync::Mutex;
+use tt_contracts::chat::ChatPayloadCursor;
 use tt_contracts::remote_chat::{
     REMOTE_CHAT_MAX_HISTORY_MESSAGES, REMOTE_CHAT_MAX_INPUT_CHARS, RemoteChatCatalog,
     RemoteChatCharacter, RemoteChatDesktopCommand, RemoteChatEvent, RemoteChatEventKind,
@@ -244,22 +245,40 @@ impl RemoteChatService {
         &self,
         character_name: String,
         file_name: String,
+        before_cursor: Option<ChatPayloadCursor>,
     ) -> Result<RemoteChatHistory, DomainError> {
-        let tail = self
-            .chats
-            .get_chat_payload_tail_lines(
-                &character_name,
-                &file_name,
-                REMOTE_CHAT_MAX_HISTORY_MESSAGES,
-            )
-            .await
-            .map_err(DomainError::from)?;
+        let (lines, cursor, has_more_before) = match before_cursor {
+            Some(cursor) => {
+                let page = self
+                    .chats
+                    .get_chat_payload_before_lines(
+                        &character_name,
+                        &file_name,
+                        cursor,
+                        REMOTE_CHAT_MAX_HISTORY_MESSAGES,
+                    )
+                    .await
+                    .map_err(DomainError::from)?;
+                (page.lines, page.cursor, page.has_more_before)
+            }
+            None => {
+                let tail = self
+                    .chats
+                    .get_chat_payload_tail_lines(
+                        &character_name,
+                        &file_name,
+                        REMOTE_CHAT_MAX_HISTORY_MESSAGES,
+                    )
+                    .await
+                    .map_err(DomainError::from)?;
+                (tail.lines, tail.cursor, tail.has_more_before)
+            }
+        };
         let target = RemoteChatTarget::Character {
             character_name,
             file_name: file_name.clone(),
         };
-        let messages = tail
-            .lines
+        let messages = lines
             .into_iter()
             .map(|line| parse_remote_chat_message(&line, &file_name))
             .collect::<Result<Vec<_>, _>>()?;
@@ -268,6 +287,8 @@ impl RemoteChatService {
             target: target.clone(),
             title: file_name,
             messages,
+            cursor,
+            has_more_before,
             generation_active: runtime
                 .active_request
                 .as_ref()
@@ -280,6 +301,7 @@ impl RemoteChatService {
         &self,
         group_id: String,
         chat_id: String,
+        before_cursor: Option<ChatPayloadCursor>,
     ) -> Result<RemoteChatHistory, DomainError> {
         let group = self
             .groups
@@ -291,13 +313,29 @@ impl RemoteChatService {
                 "Chat {chat_id} does not belong to group {group_id}"
             )));
         }
-        let tail = self
-            .group_chats
-            .get_group_chat_payload_tail_lines(&chat_id, REMOTE_CHAT_MAX_HISTORY_MESSAGES)
-            .await
-            .map_err(DomainError::from)?;
-        let messages = tail
-            .lines
+        let (lines, cursor, has_more_before) = match before_cursor {
+            Some(cursor) => {
+                let page = self
+                    .group_chats
+                    .get_group_chat_payload_before_lines(
+                        &chat_id,
+                        cursor,
+                        REMOTE_CHAT_MAX_HISTORY_MESSAGES,
+                    )
+                    .await
+                    .map_err(DomainError::from)?;
+                (page.lines, page.cursor, page.has_more_before)
+            }
+            None => {
+                let tail = self
+                    .group_chats
+                    .get_group_chat_payload_tail_lines(&chat_id, REMOTE_CHAT_MAX_HISTORY_MESSAGES)
+                    .await
+                    .map_err(DomainError::from)?;
+                (tail.lines, tail.cursor, tail.has_more_before)
+            }
+        };
+        let messages = lines
             .into_iter()
             .map(|line| parse_remote_chat_message(&line, &chat_id))
             .collect::<Result<Vec<_>, DomainError>>()?;
@@ -309,6 +347,8 @@ impl RemoteChatService {
             },
             title: group.name,
             messages,
+            cursor,
+            has_more_before,
             generation_active: runtime.active_request.as_ref().is_some_and(|active| {
                 active.target == (RemoteChatTarget::Group { group_id, chat_id })
             }),
@@ -403,6 +443,7 @@ impl RemoteChatApi for RemoteChatService {
         &self,
         session_id: &str,
         target: RemoteChatTarget,
+        before_cursor: Option<ChatPayloadCursor>,
     ) -> Result<RemoteChatHistory, DomainError> {
         {
             let runtime = self.runtime.lock().await;
@@ -412,9 +453,13 @@ impl RemoteChatApi for RemoteChatService {
             RemoteChatTarget::Character {
                 character_name,
                 file_name,
-            } => self.read_character_history(character_name, file_name).await,
+            } => {
+                self.read_character_history(character_name, file_name, before_cursor)
+                    .await
+            }
             RemoteChatTarget::Group { group_id, chat_id } => {
-                self.read_group_history(group_id, chat_id).await
+                self.read_group_history(group_id, chat_id, before_cursor)
+                    .await
             }
         }?;
         let runtime = self.runtime.lock().await;

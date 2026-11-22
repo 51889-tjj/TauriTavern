@@ -8,81 +8,327 @@ function errorText(error) {
     return message.slice(0, MAX_REMOTE_CONTROL_ERROR_CHARS);
 }
 
-async function invokeOperation(operation, { safeInvoke, invokeTransport }) {
+function requireRecord(value, label) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`Remote Control received invalid ${label}`);
+    }
+    return value;
+}
+
+function requireBoolean(value, label) {
+    if (typeof value !== 'boolean') {
+        throw new Error(`Remote Control received invalid ${label}`);
+    }
+    return value;
+}
+
+function requireString(value, label) {
+    if (typeof value !== 'string') {
+        throw new Error(`Remote Control received invalid ${label}`);
+    }
+    return value;
+}
+
+function requireNumber(value, label) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new Error(`Remote Control received invalid ${label}`);
+    }
+    return value;
+}
+
+function requireStringArray(value, label) {
+    if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
+        throw new Error(`Remote Control received invalid ${label}`);
+    }
+    return value;
+}
+
+async function getTauriTavernSettingsPage(page, safeInvoke) {
+    const raw = requireRecord(await safeInvoke('get_tauritavern_settings'), 'TauriTavern settings');
+
+    switch (page) {
+        case 'chat':
+            return {
+                page,
+                chatVirtualizationEnabled: requireBoolean(raw.chat_virtualization_enabled, 'chat virtualization setting'),
+                coldSwipesEnabled: requireBoolean(raw.cold_swipes_enabled, 'cold swipes setting'),
+                codeMirrorEditorEnabled: requireBoolean(raw.codemirror_editor_enabled, 'CodeMirror editor setting'),
+            };
+        case 'backups': {
+            const backups = requireRecord(raw.chat_backups, 'chat backup settings');
+            return {
+                page,
+                automaticEnabled: requireBoolean(backups.automatic_enabled, 'automatic chat backups setting'),
+                zstdCompressionEnabled: requireBoolean(backups.zstd_compression_enabled, 'chat backup compression setting'),
+                maxFilesPerPrefix: requireNumber(backups.max_files_per_prefix, 'chat backup per-prefix limit'),
+                maxTotalFiles: requireNumber(backups.max_total_files, 'chat backup file limit'),
+                maxTotalBytes: requireNumber(backups.max_total_bytes, 'chat backup byte limit'),
+            };
+        }
+        case 'appearance': {
+            const theme = requireRecord(raw.dynamic_theme, 'dynamic theme settings');
+            return {
+                page,
+                avatarPersonaOriginalImagesEnabled: requireBoolean(
+                    raw.avatar_persona_original_images_enabled,
+                    'original avatar image setting',
+                ),
+                dynamicTheme: {
+                    enabled: requireBoolean(theme.enabled, 'dynamic theme enabled setting'),
+                    dayTheme: requireString(theme.day_theme, 'day theme'),
+                    nightTheme: requireString(theme.night_theme, 'night theme'),
+                    wallpaperEnabled: requireBoolean(theme.wallpaper_enabled, 'dynamic wallpaper setting'),
+                    dayWallpaper: requireString(theme.day_wallpaper, 'day wallpaper'),
+                    nightWallpaper: requireString(theme.night_wallpaper, 'night wallpaper'),
+                },
+            };
+        }
+        case 'network': {
+            const proxy = requireRecord(raw.request_proxy, 'request proxy settings');
+            return {
+                page,
+                requestProxy: {
+                    enabled: requireBoolean(proxy.enabled, 'request proxy enabled setting'),
+                    url: requireString(proxy.url, 'request proxy URL'),
+                    bypass: requireStringArray(proxy.bypass, 'request proxy bypass list'),
+                },
+            };
+        }
+        case 'privacy':
+            return {
+                page,
+                allowKeysExposure: requireBoolean(raw.allow_keys_exposure, 'API key exposure setting'),
+            };
+        case 'models': {
+            const models = requireRecord(raw.models, 'model settings');
+            const claude = requireRecord(models.claude, 'Claude model settings');
+            return {
+                page,
+                promptCacheTtl: requireString(claude.prompt_cache_ttl, 'Claude prompt cache TTL'),
+            };
+        }
+        case 'agent': {
+            const agent = requireRecord(raw.agent, 'Agent settings');
+            const retention = requireRecord(agent.retention, 'Agent retention settings');
+            return {
+                page,
+                retention: {
+                    autoPruneEnabled: requireBoolean(retention.auto_prune_enabled, 'Agent auto-prune setting'),
+                    keepRecentTerminalRuns: requireNumber(retention.keep_recent_terminal_runs, 'Agent terminal run retention'),
+                    keepFullRecentRuns: requireNumber(retention.keep_full_recent_runs, 'Agent full run retention'),
+                },
+            };
+        }
+        default:
+            throw new Error(`Remote Control does not support this settings page: ${String(page)}`);
+    }
+}
+
+function requireOnlyKeys(value, allowed, label) {
+    const record = requireRecord(value, label);
+    const unknown = Object.keys(record).find(key => !allowed.includes(key));
+    if (unknown) {
+        throw new Error(`Remote Control does not allow ${label} field: ${unknown}`);
+    }
+    return record;
+}
+
+export function validateTauriTavernSettingsPagePatch(page, value) {
+    const patch = requireRecord(value, 'TauriTavern settings update');
+    switch (page) {
+        case 'chat':
+            return requireOnlyKeys(patch, [
+                'chat_virtualization_enabled',
+                'cold_swipes_enabled',
+                'codemirror_editor_enabled',
+            ], 'chat settings');
+        case 'backups': {
+            requireOnlyKeys(patch, ['chat_backups'], 'backup settings');
+            const backups = requireOnlyKeys(patch.chat_backups, [
+                'automatic_enabled',
+                'zstd_compression_enabled',
+                'max_files_per_prefix',
+                'max_total_files',
+                'max_total_bytes',
+            ], 'chat backup settings');
+            return { chat_backups: backups };
+        }
+        case 'appearance': {
+            requireOnlyKeys(patch, ['avatar_persona_original_images_enabled', 'dynamic_theme'], 'appearance settings');
+            if (patch.dynamic_theme === undefined) {
+                return { avatar_persona_original_images_enabled: patch.avatar_persona_original_images_enabled };
+            }
+            const dynamicTheme = requireOnlyKeys(patch.dynamic_theme, [
+                'enabled',
+                'day_theme',
+                'night_theme',
+                'wallpaper_enabled',
+                'day_wallpaper',
+                'night_wallpaper',
+            ], 'dynamic theme settings');
+            return {
+                ...(patch.avatar_persona_original_images_enabled === undefined
+                    ? {}
+                    : { avatar_persona_original_images_enabled: patch.avatar_persona_original_images_enabled }),
+                dynamic_theme: dynamicTheme,
+            };
+        }
+        case 'network': {
+            requireOnlyKeys(patch, ['request_proxy'], 'network settings');
+            const requestProxy = requireOnlyKeys(patch.request_proxy, [
+                'enabled',
+                'url',
+                'bypass',
+            ], 'request proxy settings');
+            return { request_proxy: requestProxy };
+        }
+        case 'privacy':
+            return requireOnlyKeys(patch, ['allow_keys_exposure'], 'privacy settings');
+        case 'models': {
+            requireOnlyKeys(patch, ['models'], 'model settings');
+            const models = requireOnlyKeys(patch.models, ['claude'], 'model settings');
+            const claude = requireOnlyKeys(models.claude, ['prompt_cache_ttl'], 'Claude model settings');
+            return { models: { claude } };
+        }
+        case 'agent': {
+            requireOnlyKeys(patch, ['agent'], 'Agent settings');
+            const agent = requireOnlyKeys(patch.agent, ['retention'], 'Agent settings');
+            const retention = requireOnlyKeys(agent.retention, [
+                'auto_prune_enabled',
+                'keep_recent_terminal_runs',
+                'keep_full_recent_runs',
+            ], 'Agent retention settings');
+            return { agent: { retention } };
+        }
+        default:
+            throw new Error(`Remote Control does not support this settings page: ${String(page)}`);
+    }
+}
+
+async function getRemoteExtensions(safeInvoke) {
+    const extensions = await safeInvoke('get_extensions');
+    if (!Array.isArray(extensions)) {
+        throw new Error('Remote Control received an invalid extension list');
+    }
+    const { findExtension } = await import('../../../../scripts/extensions.js');
+    return extensions.map(value => {
+        const extension = requireRecord(value, 'extension entry');
+        const name = requireString(extension.name, 'extension name');
+        const state = findExtension(name);
+        return {
+            ...extension,
+            enabled: state?.enabled ?? null,
+        };
+    });
+}
+
+async function setRemoteExtensionEnabled(operation, safeInvoke) {
+    const extensionName = requireString(operation.extensionName, 'extension name');
+    const enabled = requireBoolean(operation.enabled, 'extension enabled state');
+    const extensions = await safeInvoke('get_extensions');
+    if (!Array.isArray(extensions)) {
+        throw new Error('Remote Control received an invalid extension list');
+    }
+    const installed = extensions
+        .map(value => requireRecord(value, 'extension entry'))
+        .find(extension => extension.name === extensionName);
+    if (!installed) {
+        throw new Error(`Extension is not installed on the computer: ${extensionName}`);
+    }
+    if (!['Local', 'Global'].includes(installed.extension_type)) {
+        throw new Error('Remote Control can only toggle installed third-party extensions');
+    }
+
+    const extensionApi = await import('../../../../scripts/extensions.js');
+    const state = extensionApi.findExtension(extensionName);
+    if (!state) {
+        throw new Error(`Extension state is unavailable on the computer: ${extensionName}`);
+    }
+    if (state.enabled !== enabled) {
+        if (enabled) {
+            await extensionApi.enableExtension(state.name, false);
+        } else {
+            await extensionApi.disableExtension(state.name, false);
+        }
+    }
+    return { enabled, reloadRequired: state.enabled !== enabled };
+}
+
+async function requireRemoteThirdPartyExtension(extensionName, safeInvoke) {
+    const name = requireString(extensionName, 'extension name');
+    const extensions = await safeInvoke('get_extensions');
+    if (!Array.isArray(extensions)) {
+        throw new Error('Remote Control received an invalid extension list');
+    }
+    const extension = extensions
+        .map(value => requireRecord(value, 'extension entry'))
+        .find(candidate => candidate.name === name);
+    if (!extension || !['Local', 'Global'].includes(extension.extension_type)) {
+        throw new Error(`Remote Control only manages installed third-party extensions: ${name}`);
+    }
+    return name;
+}
+
+async function runRemoteExtensionOperation(operation, operationName, safeInvoke) {
+    const name = await requireRemoteThirdPartyExtension(operation.extensionName, safeInvoke);
+    const extensionApi = await import('../../../../scripts/extensions.js');
+    const run = extensionApi[operationName];
+    if (typeof run !== 'function') {
+        throw new Error(`Desktop extension management is unavailable: ${operationName}`);
+    }
+    return run(name);
+}
+
+async function invokeOperation(operation, { safeInvoke }) {
     switch (operation?.kind) {
-        case 'wait_for_backend_ready':
-            return safeInvoke('wait_for_backend_ready');
-        case 'backend_error_bridge_ready':
-            return safeInvoke('backend_error_bridge_ready');
-        case 'get_client_version':
-            return safeInvoke('get_client_version');
-        case 'get_tauri_tavern_settings':
-            return safeInvoke('get_tauritavern_settings');
-        case 'update_tauri_tavern_settings':
-            return safeInvoke('update_tauritavern_settings', { dto: operation.dto });
-        case 'get_personas':
-            return safeInvoke('get_personas');
-        case 'get_bootstrap_metadata':
-            return safeInvoke('get_bootstrap_metadata');
+        case 'get_tauri_tavern_settings_page':
+            return getTauriTavernSettingsPage(operation.page, safeInvoke);
+        case 'update_tauri_tavern_settings_page':
+            return safeInvoke('update_tauritavern_settings', {
+                dto: validateTauriTavernSettingsPagePatch(operation.page, operation.dto),
+            });
+        case 'get_silly_tavern_settings_page': {
+            const settingsPages = await import('./sillytavern-settings-pages.js');
+            return settingsPages.getSillyTavernSettingsPage(operation.page);
+        }
+        case 'update_silly_tavern_settings_page': {
+            const settingsPages = await import('./sillytavern-settings-pages.js');
+            return settingsPages.updateSillyTavernSettingsPage(operation.page, operation.dto);
+        }
+        case 'get_chat_completion_settings': {
+            const api = await import('../../../../scripts/openai.js');
+            return api.getRemoteChatCompletionSettings(operation.source ?? undefined);
+        }
+        case 'update_chat_completion_settings': {
+            const api = await import('../../../../scripts/openai.js');
+            return api.updateRemoteChatCompletionSettings(operation.dto);
+        }
+        case 'set_chat_completion_api_key': {
+            const api = await import('../../../../scripts/openai.js');
+            return api.writeRemoteChatCompletionApiKey(
+                operation.source,
+                operation.value,
+                operation.label ?? undefined,
+            );
+        }
+        case 'delete_chat_completion_api_key': {
+            const api = await import('../../../../scripts/openai.js');
+            return api.deleteRemoteChatCompletionApiKey(operation.source);
+        }
         case 'get_extensions':
-            return safeInvoke('get_extensions');
-        case 'get_all_characters':
-            return safeInvoke('get_all_characters', { shallow: operation.shallow ?? true });
-        case 'get_all_groups':
-            return safeInvoke('get_all_groups');
-        case 'list_recent_chat_summaries':
-            return safeInvoke('list_recent_chat_summaries', {
-                character_filter: operation.characterFilter ?? null,
-                include_metadata: operation.includeMetadata ?? false,
-                max_entries: operation.maxEntries ?? null,
-                pinned: operation.pinned ?? null,
-            });
-        case 'list_recent_group_chat_summaries':
-            return safeInvoke('list_recent_group_chat_summaries', {
-                chat_ids: operation.chatIds ?? null,
-                include_metadata: operation.includeMetadata ?? false,
-                max_entries: operation.maxEntries ?? null,
-                pinned: operation.pinned ?? null,
-            });
-        case 'get_all_backgrounds':
-            return safeInvoke('get_all_backgrounds');
-        case 'get_all_background_metadata':
-            return safeInvoke('get_all_background_metadata', { prefix: operation.prefix });
-        case 'get_background_folders':
-            return safeInvoke('get_background_folders');
-        case 'get_chat_completions_status':
-            return safeInvoke('get_chat_completions_status');
-        case 'list_active_agent_runs':
-            return safeInvoke('list_active_agent_runs');
-        case 'read_frontend_template':
-            return safeInvoke('read_frontend_template', { name: operation.name });
-        case 'read_frontend_extension_template':
-            return safeInvoke('read_frontend_extension_template', {
-                extension: operation.extension,
-                name: operation.name,
-            });
-        case 'save_theme':
-            return safeInvoke('save_theme', { dto: operation.dto });
-        case 'delete_theme':
-            return safeInvoke('delete_theme', { dto: operation.dto });
-        case 'save_quick_reply_set':
-            return safeInvoke('save_quick_reply_set', { payload: operation.payload });
-        case 'delete_quick_reply_set':
-            return safeInvoke('delete_quick_reply_set', { payload: operation.payload });
-        case 'save_preset':
-            return safeInvoke('save_preset', { dto: operation.dto });
-        case 'delete_preset':
-            return safeInvoke('delete_preset', { dto: operation.dto });
-        case 'restore_preset':
-            return safeInvoke('restore_preset', { dto: operation.dto });
-        case 'read_secret_state':
-            return safeInvoke('read_secret_state');
-        case 'read_secret_settings':
-            return safeInvoke('read_secret_settings');
-        case 'write_secret':
-            return safeInvoke('write_secret', { dto: operation.dto });
-        case 'delete_secret':
-            return safeInvoke('delete_secret', { dto: operation.dto });
+            return getRemoteExtensions(safeInvoke);
+        case 'set_extension_enabled':
+            return setRemoteExtensionEnabled(operation, safeInvoke);
+        case 'install_extension': {
+            const url = requireString(operation.url, 'extension URL');
+            const branch = typeof operation.branch === 'string' ? operation.branch : '';
+            const extensionApi = await import('../../../../scripts/extensions.js');
+            return extensionApi.installExtensionFromRemote(url, branch);
+        }
+        case 'update_extension':
+            return runRemoteExtensionOperation(operation, 'updateExtensionFromRemote', safeInvoke);
+        case 'delete_extension':
+            return runRemoteExtensionOperation(operation, 'deleteExtensionFromRemote', safeInvoke);
         case 'list_llm_connections':
             return safeInvoke('list_llm_connections');
         case 'load_llm_connection':
@@ -91,25 +337,6 @@ async function invokeOperation(operation, { safeInvoke, invokeTransport }) {
             return safeInvoke('save_llm_connection', { dto: operation.dto });
         case 'delete_llm_connection':
             return safeInvoke('delete_llm_connection', { dto: operation.dto });
-        case 'begin_settings_commit':
-            return invokeTransport('begin_settings_commit', {
-                expectedRevision: operation.expectedRevision ?? null,
-            });
-        case 'append_settings_commit_chunk':
-            return invokeTransport(
-                'append_settings_commit_chunk',
-                Uint8Array.from(operation.data ?? []),
-                { headers: operation.headers ?? {} },
-            );
-        case 'finish_settings_commit':
-            return invokeTransport('finish_settings_commit', {
-                sessionId: operation.sessionId,
-                expectedSize: operation.expectedSize,
-            });
-        case 'abort_settings_commit':
-            return invokeTransport('abort_settings_commit', {
-                sessionId: operation.sessionId,
-            });
         default:
             throw new Error(
                 `Remote Control received an unsupported operation: ${String(operation?.kind ?? 'unknown')}`,
@@ -121,7 +348,6 @@ async function invokeOperation(operation, { safeInvoke, invokeTransport }) {
  * Runs allowlisted remote operations through the existing desktop invoke service.
  * @param {{
  *   safeInvoke: (command: string, args?: any) => Promise<any>,
- *   invokeTransport: (command: string, args?: any, options?: any) => Promise<any>,
  *   getSessionId: () => string | null,
  *   markSessionStarted: (sessionId: string) => void,
  *   markSessionEnded: (sessionId: string) => void,

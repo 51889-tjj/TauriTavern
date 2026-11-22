@@ -145,13 +145,6 @@ async function initializeApplication() {
     }
 
     try {
-        if (window.__TAURITAVERN_REMOTE_SHELL__ === true) {
-            const { waitForRemoteShellConnection } = await importWithRetry(
-                './tauri/remote-control/mobile-gate.js',
-            );
-            await waitForRemoteShellConnection();
-        }
-
         await window.__TAURITAVERN_DEV_SW_READY__;
 
         // lib.js statically imports ./dist/lib.core.bundle.js, so this guarantees

@@ -78,11 +78,12 @@ export function installRemoteChatApi(context) {
                     owner,
                 });
             },
-            getHistory(deviceId, remoteSessionId, target) {
+            getHistory(deviceId, remoteSessionId, target, beforeCursor) {
                 return safeInvoke('remote_chat_client_get_history', {
                     deviceId,
                     sessionId: remoteSessionId,
                     target,
+                    beforeCursor: beforeCursor ?? null,
                 });
             },
             submit(deviceId, remoteSessionId, request) {

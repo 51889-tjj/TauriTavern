@@ -243,6 +243,7 @@ impl RemoteChatApi for DisabledRemoteChatApi {
         &self,
         _session_id: &str,
         _target: RemoteChatTarget,
+        _before_cursor: Option<tt_contracts::chat::ChatPayloadCursor>,
     ) -> Result<RemoteChatHistory, DomainError> {
         Err(shell_host_unavailable())
     }

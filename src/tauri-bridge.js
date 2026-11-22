@@ -1,6 +1,7 @@
 // Core Tauri bridge for frontend modules.
 
 import { isLocalRemoteShellCommand, toRemoteControlOperation } from './tauri/remote-control/operations.js';
+import { createRequestId } from './scripts/util/request-id.js';
 
 function getTauri() {
     if (typeof window === 'undefined') {
@@ -40,7 +41,7 @@ function withTauriArgumentAliases(args) {
 
 export const invoke = (...args) => {
     const remote = typeof window === 'undefined' ? null : window.__TAURITAVERN_REMOTE_CONTROL__;
-    const [command, commandArgs, options] = args;
+    const [command, commandArgs] = args;
     if (
         remote
         && typeof command === 'string'
@@ -56,25 +57,11 @@ export const invoke = (...args) => {
         const normalizedArgs = args.length >= 2 && isPlainObject(commandArgs)
             ? withTauriArgumentAliases(commandArgs)
             : commandArgs;
-        if (command === 'get_sillytavern_settings') {
-            return fn('remote_control_client_get_sillytavern_settings', {
-                deviceId: remote.deviceId,
-                sessionId: remote.sessionId,
-            });
-        }
-        if (command === 'open_chat_payload_json') {
-            return fn('remote_control_client_get_chat_payload', {
-                deviceId: remote.deviceId,
-                sessionId: remote.sessionId,
-                target: normalizedArgs?.target,
-                allowNotFound: Boolean(normalizedArgs?.allowNotFound),
-            });
-        }
-        const operation = toRemoteControlOperation(command, normalizedArgs, options);
+        const operation = toRemoteControlOperation(command, normalizedArgs);
         return fn('remote_control_client_invoke', {
             deviceId: remote.deviceId,
             sessionId: remote.sessionId,
-            requestId: crypto.randomUUID(),
+            requestId: createRequestId(),
             operation,
         }).then(value => {
             if (value?.kind === 'json') {

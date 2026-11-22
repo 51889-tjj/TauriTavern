@@ -29,7 +29,7 @@
 5. 启动期先执行 `activateStartupSystemExtensions()`，只激活系统扩展
 6. 若存在启用中的 local/global third-party 扩展，则在 `APP_READY` 后执行 `activateDeferredThirdPartyExtensions()`
 
-Remote Control 的 iOS 壳会把 third-party 资源 URL 指向按 Remote Control 会话隔离的 `tt-remote://` 原生 origin，因此 ESM/CSS 相对与根相对路径都能保留。协议只接受 `/scripts/extensions/third-party/*`，通过已配对设备的证书固定客户端读取桌面资源，再由桌面现有 Host Resource Service 校验路径并返回文件级资源；不提供目录枚举、任意路径或 HTTP 代理。第三方单个资源仍受移动端 32 MiB 上限约束。资源内容由 WebView 按原生 URL 加载，不经 JSON 或 base64。
+当前 Remote Control iOS 壳启动独立移动控制界面，不加载第三方扩展代码或资源；因此该界面不会创建 third-party 资源 URL。此前为完整移动前端提供的 `tt-remote://` 资源协议已随该路径移除。扩展目录管理仍由电脑端拥有，也不应通过其它方式把任意文件访问或代理能力加入手机。
 
 补充约束：
 
@@ -164,7 +164,7 @@ Host Resource 只校验浏览器 URL 的路径段，不禁止 data root 内部 s
 - 相对资源路径中的冗余 `/` 仅做等价归一化，不扩大访问范围
 - `.git`、`.Git` 等名称按普通路径段接受；不要与 `.` / `..` 混同
 - 只允许 third-party 前缀内的文件级读取，不提供目录浏览
-- Remote Control 仅复用该 third-party 资源路径；其它 Host Resource 路径仍不通过 iOS 远程协议公开
+- 当前 Remote Control 移动 UI 不读取 third-party 资源；其它 Host Resource 路径也不通过 iOS 远程协议公开
 
 ## 5. 当前明确不支持或不承诺的内容
 

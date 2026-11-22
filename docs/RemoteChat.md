@@ -53,9 +53,9 @@
 
 ## 实施状态
 
-当前实现包含 Remote Chat DTO、LAN HTTPS 路由、已配对设备客户端、桌面标准发送桥，以及桌面扩展内的 Remote Chat 面板。独立 iOS App 的 host 源码仍位于 `remote-chat-shell/`，但它现在打包 TauriTavern 的完整移动前端；聊天协议仍是独立能力，不是完整远程控制通道。远程控制的目标和当前覆盖范围见 [Remote Control](RemoteControl.md)。
+当前实现包含 Remote Chat DTO、LAN HTTPS 路由、已配对设备客户端、桌面标准发送桥，以及桌面扩展内的 Remote Chat 面板。历史首屏读取最近 100 条；用户请求时使用文件游标按页读取更早消息。独立 iOS shell 仍位于 `remote-chat-shell/`，通过 `remote-control.html` 启动专用移动控制界面，不加载完整 `src/index.html`。移动界面复用 Remote Chat 协议显示聊天；模型、扩展与设置通过单独的 Remote Control allowlist 操作处理，详见 [Remote Control](RemoteControl.md)。
 
-Codemagic 的 `remote-chat-shell-ios-trollstore` workflow 构建独立 Bundle ID 的未签名 IPA。iOS 构建需要 macOS/Xcode。真机验收需先在电脑启动 LAN Sync 并批准手机配对；使用远程配置还需在电脑的 Remote Control 面板显式启动会话。
+Codemagic 的 `remote-chat-shell-ios-trollstore` workflow 构建独立 Bundle ID 的未签名 IPA。iOS 构建需要 macOS/Xcode。真机验收需先在电脑启动 LAN Sync 并批准手机配对；手机设置/扩展等控制页需电脑显式启动 Remote Control，聊天页还需电脑显式启动 Remote Chat。
 
 ## 原型打包
 

@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use tauri::State;
+use tt_contracts::chat::ChatPayloadCursor;
 use tt_contracts::remote_chat::{
     RemoteChatCatalog, RemoteChatEventsPage, RemoteChatHistory, RemoteChatOwner,
     RemoteChatSessionStatus, RemoteChatSubmit, RemoteChatSubmitResponse, RemoteChatSummary,
     RemoteChatTarget,
 };
 use tt_contracts::remote_control::{
-    RemoteControlChatTarget, RemoteControlOperation, RemoteControlSessionStatus, RemoteControlValue,
+    RemoteControlOperation, RemoteControlSessionStatus, RemoteControlValue,
 };
 
 use crate::app::composition::ShellServices;
@@ -128,10 +129,11 @@ pub(crate) async fn remote_chat_client_get_history(
     device_id: String,
     session_id: String,
     target: RemoteChatTarget,
+    before_cursor: Option<ChatPayloadCursor>,
 ) -> Result<RemoteChatHistory, String> {
     services
         .remote_chat_client
-        .get_history(&device_id, &session_id, target)
+        .get_history(&device_id, &session_id, target, before_cursor)
         .await
         .map_err(|error| error.to_string())
 }
@@ -224,34 +226,4 @@ pub(crate) async fn remote_control_client_invoke(
         .invoke(&device_id, &session_id, &request_id, operation)
         .await
         .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-pub(crate) async fn remote_control_client_get_sillytavern_settings(
-    services: State<'_, Arc<ShellServices>>,
-    device_id: String,
-    session_id: String,
-) -> Result<tauri::ipc::Response, String> {
-    let bytes = services
-        .remote_control_client
-        .get_sillytavern_settings(&device_id, &session_id)
-        .await
-        .map_err(|error| error.to_string())?;
-    Ok(tauri::ipc::Response::new(bytes))
-}
-
-#[tauri::command]
-pub(crate) async fn remote_control_client_get_chat_payload(
-    services: State<'_, Arc<ShellServices>>,
-    device_id: String,
-    session_id: String,
-    target: RemoteControlChatTarget,
-    allow_not_found: bool,
-) -> Result<tauri::ipc::Response, String> {
-    let bytes = services
-        .remote_control_client
-        .get_chat_payload(&device_id, &session_id, target, allow_not_found)
-        .await
-        .map_err(|error| error.to_string())?;
-    Ok(tauri::ipc::Response::new(bytes))
 }

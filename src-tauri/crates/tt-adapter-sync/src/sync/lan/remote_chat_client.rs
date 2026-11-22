@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use tokio::sync::Mutex;
+use tt_contracts::chat::ChatPayloadCursor;
 use tt_contracts::remote_chat::{
     RemoteChatCatalog, RemoteChatEventsPage, RemoteChatHistory, RemoteChatOwner,
     RemoteChatSessionStatus, RemoteChatSubmit, RemoteChatSubmitResponse, RemoteChatSummary,
@@ -136,9 +137,15 @@ impl RemoteChatClientSession for HttpRemoteChatClientSession {
         &self,
         session_id: &str,
         target: RemoteChatTarget,
+        before_cursor: Option<ChatPayloadCursor>,
     ) -> Result<RemoteChatHistory, DomainError> {
         self.client
-            .remote_chat_history(&self.session_token().await?, session_id, target)
+            .remote_chat_history(
+                &self.session_token().await?,
+                session_id,
+                target,
+                before_cursor,
+            )
             .await
     }
 

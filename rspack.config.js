@@ -195,6 +195,23 @@ export function createRspackConfigs(mode = 'production') {
     module: createReactModule(development),
   };
 
+  const remoteControlShellConfig = {
+    ...createSharedConfig(mode, 'remote-control-shell'),
+    entry: {
+      index: './src/remote-control-app/index.tsx',
+    },
+    output: {
+      filename: 'index.bundle.js',
+      path: path.resolve(__dirname, 'src/remote-control-app/dist'),
+      module: true,
+      library: {
+        type: 'module'
+      },
+      clean: true,
+    },
+    module: createReactModule(development),
+  };
+
   const inAppAgentConfig = {
     ...createSharedConfig(mode, 'in-app-agent'),
     entry: {
@@ -244,6 +261,7 @@ export function createRspackConfigs(mode = 'production') {
     mcpManagerConfig,
     inAppAgentConfig,
     remoteChatConfig,
+    remoteControlShellConfig,
     tauriTavernSettingsConfig,
   ];
 }

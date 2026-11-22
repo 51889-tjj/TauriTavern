@@ -17,6 +17,25 @@ pub struct RemoteControlSessionStatus {
     pub session_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteControlSettingsPage {
+    Chat,
+    Backups,
+    Appearance,
+    Network,
+    Privacy,
+    Models,
+    Agent,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteControlSillyTavernSettingsPage {
+    Generation,
+    Interface,
+}
+
 /// The mobile client can request only explicitly supported Remote Control operations.
 /// Adding an operation is an explicit capability change, not a generic Tauri invoke.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,74 +45,48 @@ pub struct RemoteControlSessionStatus {
     rename_all_fields = "camelCase"
 )]
 pub enum RemoteControlOperation {
-    WaitForBackendReady,
-    BackendErrorBridgeReady,
-    GetClientVersion,
-    GetTauriTavernSettings,
-    UpdateTauriTavernSettings {
+    GetTauriTavernSettingsPage {
+        page: RemoteControlSettingsPage,
+    },
+    UpdateTauriTavernSettingsPage {
+        page: RemoteControlSettingsPage,
         dto: Value,
     },
-    GetPersonas,
-    GetBootstrapMetadata,
+    GetSillyTavernSettingsPage {
+        page: RemoteControlSillyTavernSettingsPage,
+    },
+    UpdateSillyTavernSettingsPage {
+        page: RemoteControlSillyTavernSettingsPage,
+        dto: Value,
+    },
+    GetChatCompletionSettings {
+        source: Option<String>,
+    },
+    UpdateChatCompletionSettings {
+        dto: Value,
+    },
+    SetChatCompletionApiKey {
+        source: String,
+        value: String,
+        label: Option<String>,
+    },
+    DeleteChatCompletionApiKey {
+        source: String,
+    },
     GetExtensions,
-    GetAllCharacters {
-        shallow: Option<bool>,
+    SetExtensionEnabled {
+        extension_name: String,
+        enabled: bool,
     },
-    GetAllGroups,
-    ListRecentChatSummaries {
-        character_filter: Option<String>,
-        include_metadata: Option<bool>,
-        max_entries: Option<usize>,
-        pinned: Option<Vec<Value>>,
+    InstallExtension {
+        url: String,
+        branch: Option<String>,
     },
-    ListRecentGroupChatSummaries {
-        chat_ids: Option<Vec<String>>,
-        include_metadata: Option<bool>,
-        max_entries: Option<usize>,
-        pinned: Option<Vec<Value>>,
+    UpdateExtension {
+        extension_name: String,
     },
-    GetAllBackgrounds,
-    GetAllBackgroundMetadata {
-        prefix: Option<String>,
-    },
-    GetBackgroundFolders,
-    GetChatCompletionsStatus,
-    ListActiveAgentRuns,
-    ReadFrontendTemplate {
-        name: String,
-    },
-    ReadFrontendExtensionTemplate {
-        extension: String,
-        name: String,
-    },
-    SaveTheme {
-        dto: Value,
-    },
-    DeleteTheme {
-        dto: Value,
-    },
-    SaveQuickReplySet {
-        payload: Value,
-    },
-    DeleteQuickReplySet {
-        payload: Value,
-    },
-    SavePreset {
-        dto: Value,
-    },
-    DeletePreset {
-        dto: Value,
-    },
-    RestorePreset {
-        dto: Value,
-    },
-    ReadSecretState,
-    ReadSecretSettings,
-    WriteSecret {
-        dto: Value,
-    },
-    DeleteSecret {
-        dto: Value,
+    DeleteExtension {
+        extension_name: String,
     },
     ListLlmConnections,
     LoadLlmConnection {
@@ -104,20 +97,6 @@ pub enum RemoteControlOperation {
     },
     DeleteLlmConnection {
         dto: Value,
-    },
-    BeginSettingsCommit {
-        expected_revision: Option<Value>,
-    },
-    AppendSettingsCommitChunk {
-        data: Vec<u8>,
-        headers: std::collections::BTreeMap<String, String>,
-    },
-    FinishSettingsCommit {
-        session_id: String,
-        expected_size: u64,
-    },
-    AbortSettingsCommit {
-        session_id: String,
     },
 }
 
@@ -221,34 +200,80 @@ mod tests {
 
     #[test]
     fn remote_control_operations_use_explicit_discriminators() {
-        let operation = RemoteControlOperation::UpdateTauriTavernSettings {
-            dto: serde_json::json!({ "close_to_tray_on_close": true }),
+        let operation = RemoteControlOperation::UpdateTauriTavernSettingsPage {
+            page: RemoteControlSettingsPage::Chat,
+            dto: serde_json::json!({ "chat_virtualization_enabled": true }),
         };
         let value = serde_json::to_value(&operation).expect("serialize operation");
-        assert_eq!(value["kind"], "update_tauri_tavern_settings");
-        assert_eq!(value["dto"]["close_to_tray_on_close"], true);
+        assert_eq!(value["kind"], "update_tauri_tavern_settings_page");
+        assert_eq!(value["page"], "chat");
+        assert_eq!(value["dto"]["chat_virtualization_enabled"], true);
         assert_eq!(
-            serde_json::to_value(RemoteControlOperation::GetTauriTavernSettings)
-                .expect("serialize TauriTavern settings read")["kind"],
-            "get_tauri_tavern_settings"
-        );
-        assert_eq!(
-            serde_json::to_value(RemoteControlOperation::ListRecentChatSummaries {
-                character_filter: None,
-                include_metadata: Some(false),
-                max_entries: Some(20),
-                pinned: None,
+            serde_json::to_value(RemoteControlOperation::GetTauriTavernSettingsPage {
+                page: RemoteControlSettingsPage::Chat,
             })
-            .expect("serialize recent chat read"),
+            .expect("serialize page-scoped TauriTavern settings read"),
             serde_json::json!({
-                "kind": "list_recent_chat_summaries",
-                "characterFilter": null,
-                "includeMetadata": false,
-                "maxEntries": 20,
-                "pinned": null,
+                "kind": "get_tauri_tavern_settings_page",
+                "page": "chat",
             })
         );
-
+        assert_eq!(
+            serde_json::to_value(RemoteControlOperation::GetSillyTavernSettingsPage {
+                page: RemoteControlSillyTavernSettingsPage::Generation,
+            })
+            .expect("serialize page-scoped SillyTavern settings read"),
+            serde_json::json!({
+                "kind": "get_silly_tavern_settings_page",
+                "page": "generation",
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(RemoteControlOperation::UpdateTauriTavernSettingsPage {
+                page: RemoteControlSettingsPage::Chat,
+                dto: serde_json::json!({ "chat_virtualization_enabled": true }),
+            })
+            .expect("serialize page-scoped TauriTavern settings update"),
+            serde_json::json!({
+                "kind": "update_tauri_tavern_settings_page",
+                "page": "chat",
+                "dto": { "chat_virtualization_enabled": true },
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(RemoteControlOperation::SetExtensionEnabled {
+                extension_name: "third-party/example".to_string(),
+                enabled: false,
+            })
+            .expect("serialize extension enable state"),
+            serde_json::json!({
+                "kind": "set_extension_enabled",
+                "extensionName": "third-party/example",
+                "enabled": false,
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(RemoteControlOperation::GetChatCompletionSettings {
+                source: Some("openai".to_string()),
+            })
+            .expect("serialize page-scoped Chat Completion read"),
+            serde_json::json!({
+                "kind": "get_chat_completion_settings",
+                "source": "openai",
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(RemoteControlOperation::InstallExtension {
+                url: "https://example.test/repo.git".to_string(),
+                branch: Some("main".to_string()),
+            })
+            .expect("serialize extension installation"),
+            serde_json::json!({
+                "kind": "install_extension",
+                "url": "https://example.test/repo.git",
+                "branch": "main",
+            })
+        );
         let unsupported = serde_json::from_value::<RemoteControlOperation>(serde_json::json!({
             "kind": "execute_arbitrary_command",
             "command": "anything"

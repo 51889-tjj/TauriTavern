@@ -1,22 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { RemoteChatConversation } from './RemoteChatConversation';
-import { RemoteControlHostPanel } from './RemoteControlHostPanel';
+import {
+    RemoteChatClientView,
+    type RemoteChatClientDevice,
+    type RemoteChatView,
+    type RemoteChatViewMessage,
+} from './RemoteChatClientView';
+import { RemoteChatHostView } from './RemoteChatHostView';
+import { createRequestId, type RemoteChatMessageKey } from './host';
 
 type RemoteChatApi = TauriTavernRemoteChatApi;
 type RemoteChatTarget = TauriTavernRemoteChatTarget;
 type RemoteChatOwner = TauriTavernRemoteChatOwner;
-type RemoteChatMessage = TauriTavernRemoteChatMessage & { key: string };
-type PairedDevice = Awaited<ReturnType<RemoteChatApi['client']['listPairedDevices']>>[number];
-type View = 'devices' | 'owners' | 'chats' | 'conversation';
+type RemoteChatMessage = RemoteChatViewMessage;
+type PairedDevice = RemoteChatClientDevice;
 type Mode = 'host' | 'client';
-type Translator = (key: import('./host').RemoteChatMessageKey) => string;
+type Translator = (key: RemoteChatMessageKey) => string;
 
 type Props = {
     api: RemoteChatApi;
     remoteControlApi?: TauriTavernRemoteControlApi;
     tr: Translator;
-    onClose: () => void;
+    onClose?: () => void;
 };
 
 function errorText(error: unknown, fallback: string): string {
@@ -36,9 +41,14 @@ function mapHistoryMessages(
     }));
 }
 
+function remoteChatTargetKey(target: RemoteChatTarget): string {
+    return target.kind === 'character'
+        ? `character:${target.characterName}:${target.fileName}`
+        : `group:${target.groupId}:${target.chatId}`;
+}
+
 export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
     const [mode, setMode] = useState<Mode>(api.host.available ? 'host' : 'client');
-    const [hostStatus, setHostStatus] = useState<TauriTavernRemoteChatSessionStatus | null>(null);
     const [devices, setDevices] = useState<PairedDevice[]>([]);
     const [devicesLoaded, setDevicesLoaded] = useState(false);
     const [device, setDevice] = useState<PairedDevice | null>(null);
@@ -48,34 +58,18 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
     const [chats, setChats] = useState<TauriTavernRemoteChatSummary[]>([]);
     const [target, setTarget] = useState<RemoteChatTarget | null>(null);
     const [messages, setMessages] = useState<RemoteChatMessage[]>([]);
-    const [view, setView] = useState<View>('devices');
+    const [hasOlderHistory, setHasOlderHistory] = useState(false);
+    const [loadingOlderHistory, setLoadingOlderHistory] = useState(false);
+    const [view, setView] = useState<RemoteChatView>('devices');
     const [selectedChatTitle, setSelectedChatTitle] = useState('');
     const [draft, setDraft] = useState('');
     const [activeRequestId, setActiveRequestId] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const cursorRef = useRef(0);
-
-    useEffect(() => {
-        if (!api.host.available) {
-            return;
-        }
-        let alive = true;
-        void api.host.status()
-            .then(status => {
-                if (alive) {
-                    setHostStatus(status);
-                }
-            })
-            .catch(reason => {
-                if (alive) {
-                    setError(errorText(reason, tr('unknownError')));
-                }
-            });
-        return () => {
-            alive = false;
-        };
-    }, [api, tr]);
+    const eventCursorRef = useRef(0);
+    const historyCursorRef = useRef<TauriTavernChatPayloadCursor | null>(null);
+    const historyTargetKeyRef = useRef('');
+    const loadingOlderHistoryRef = useRef(false);
 
     useEffect(() => {
         if (mode !== 'client' || device) {
@@ -120,7 +114,9 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
         const refreshHistory = async () => {
             const history = await api.client.getHistory(device.device_id, sessionId, target);
             if (alive) {
-                cursorRef.current = history.latestSequence;
+                eventCursorRef.current = history.latestSequence;
+                historyCursorRef.current = history.cursor;
+                setHasOlderHistory(history.hasMoreBefore);
                 setMessages(mapHistoryMessages(history.messages, `${activeRequestId}:saved`));
             }
         };
@@ -130,7 +126,7 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
                 const page = await api.client.readEvents(
                     device.device_id,
                     sessionId,
-                    cursorRef.current,
+                    eventCursorRef.current,
                 );
                 if (!alive) {
                     return;
@@ -138,7 +134,7 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
 
                 let terminal = false;
                 for (const event of page.events) {
-                    cursorRef.current = Math.max(cursorRef.current, event.sequence);
+                    eventCursorRef.current = Math.max(eventCursorRef.current, event.sequence);
                     if (event.requestId !== activeRequestId) {
                         continue;
                     }
@@ -155,7 +151,7 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
                         terminal = true;
                     }
                 }
-                cursorRef.current = Math.max(cursorRef.current, page.nextSequence);
+                eventCursorRef.current = Math.max(eventCursorRef.current, page.nextSequence);
 
                 if (terminal || !page.generationActive) {
                     try {
@@ -187,32 +183,6 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
             }
         };
     }, [activeRequestId, api, device, sessionId, target, tr]);
-
-    const startHost = async () => {
-        setBusy(true);
-        setError('');
-        try {
-            const status = await api.host.startSession();
-            setHostStatus(status);
-        } catch (reason) {
-            setError(errorText(reason, tr('unknownError')));
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const stopHost = async () => {
-        setBusy(true);
-        setError('');
-        try {
-            await api.host.stopSession();
-            setHostStatus({ active: false });
-        } catch (reason) {
-            setError(errorText(reason, tr('unknownError')));
-        } finally {
-            setBusy(false);
-        }
-    };
 
     const connect = async (selectedDevice: PairedDevice) => {
         setBusy(true);
@@ -260,19 +230,71 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
         if (!device || !sessionId) {
             return;
         }
+        const targetKey = remoteChatTargetKey(summary.target);
+        historyTargetKeyRef.current = targetKey;
         setBusy(true);
         setError('');
         try {
             const history = await api.client.getHistory(device.device_id, sessionId, summary.target);
-            cursorRef.current = history.latestSequence;
+            if (historyTargetKeyRef.current !== targetKey) {
+                return;
+            }
+            eventCursorRef.current = history.latestSequence;
+            historyCursorRef.current = history.cursor;
+            setHasOlderHistory(history.hasMoreBefore);
             setTarget(summary.target);
             setSelectedChatTitle(summary.title);
             setMessages(mapHistoryMessages(history.messages, `${history.latestSequence}:history`));
             setView('conversation');
         } catch (reason) {
-            setError(errorText(reason, tr('unknownError')));
+            if (historyTargetKeyRef.current === targetKey) {
+                setError(errorText(reason, tr('unknownError')));
+            }
         } finally {
             setBusy(false);
+        }
+    };
+
+    const loadOlderHistory = async () => {
+        if (
+            !device
+            || !sessionId
+            || !target
+            || !historyCursorRef.current
+            || !hasOlderHistory
+            || loadingOlderHistoryRef.current
+        ) {
+            return;
+        }
+
+        const targetKey = remoteChatTargetKey(target);
+        loadingOlderHistoryRef.current = true;
+        setLoadingOlderHistory(true);
+        setError('');
+        try {
+            const history = await api.client.getHistory(
+                device.device_id,
+                sessionId,
+                target,
+                historyCursorRef.current,
+            );
+            if (historyTargetKeyRef.current !== targetKey) {
+                return;
+            }
+            if (history.messages.length === 0 && history.hasMoreBefore) {
+                throw new Error('电脑返回了空的历史分页，但仍报告存在更早消息');
+            }
+            historyCursorRef.current = history.cursor;
+            setHasOlderHistory(history.hasMoreBefore);
+            setMessages(current => [
+                ...mapHistoryMessages(history.messages, `${history.cursor.offset}:before`),
+                ...current,
+            ]);
+        } catch (reason) {
+            setError(errorText(reason, tr('unknownError')));
+        } finally {
+            loadingOlderHistoryRef.current = false;
+            setLoadingOlderHistory(false);
         }
     };
 
@@ -288,6 +310,11 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
         setTarget(null);
         setSelectedChatTitle('');
         setMessages([]);
+        setHasOlderHistory(false);
+        setLoadingOlderHistory(false);
+        historyCursorRef.current = null;
+        historyTargetKeyRef.current = '';
+        loadingOlderHistoryRef.current = false;
         setActiveRequestId('');
         setView('devices');
     };
@@ -296,7 +323,7 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
         if (!device || !sessionId || !target || !draft.trim() || activeRequestId) {
             return;
         }
-        const requestId = crypto.randomUUID();
+        const requestId = createRequestId();
         const text = draft;
         setDraft('');
         setError('');
@@ -330,7 +357,15 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
             setError(errorText(reason, tr('unknownError')));
             setActiveRequestId('');
             await api.client.getHistory(device.device_id, sessionId, target)
-                .then(history => setMessages(mapHistoryMessages(history.messages, `${Date.now()}:history`)))
+                .then(history => {
+                    if (historyTargetKeyRef.current !== remoteChatTargetKey(target)) {
+                        return;
+                    }
+                    eventCursorRef.current = history.latestSequence;
+                    historyCursorRef.current = history.cursor;
+                    setHasOlderHistory(history.hasMoreBefore);
+                    setMessages(mapHistoryMessages(history.messages, `${Date.now()}:history`));
+                })
                 .catch(() => undefined);
         }
     };
@@ -362,9 +397,11 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
                     <h2>{tr('title')}</h2>
                     {device && <p>{device.device_name}</p>}
                 </div>
-                <button type="button" className="tt-remote-chat__close" onClick={onClose} aria-label={tr('close')}>
-                    ×
-                </button>
+                {onClose && (
+                    <button type="button" className="tt-remote-chat__close" onClick={onClose} aria-label={tr('close')}>
+                        ×
+                    </button>
+                )}
             </header>
 
             {api.host.available && (
@@ -381,114 +418,38 @@ export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
             {error && <p className="tt-remote-chat__error" role="alert">{error}</p>}
 
             {mode === 'host' && api.host.available && (
-                <>
-                    <div className="tt-remote-chat__host">
-                        <p>{tr('hostDescription')}</p>
-                        <p className={hostStatus?.active ? 'tt-remote-chat__status is-active' : 'tt-remote-chat__status'}>
-                            {hostStatus?.active ? tr('hostActive') : tr('hostInactive')}
-                        </p>
-                        {hostStatus?.active
-                            ? <button type="button" disabled={busy} onClick={() => void stopHost()}>{tr('stopHost')}</button>
-                            : <button type="button" disabled={busy} onClick={() => void startHost()}>{tr('startHost')}</button>}
-                    </div>
-                    {remoteControlApi?.host.available && (
-                        <RemoteControlHostPanel api={remoteControlApi} tr={tr} />
-                    )}
-                </>
+                <RemoteChatHostView
+                    api={api}
+                    {...(remoteControlApi ? { remoteControlApi } : {})}
+                    tr={tr}
+                />
             )}
 
-            {mode === 'client' && view === 'devices' && (
-                <div className="tt-remote-chat__list">
-                    <h3>{tr('chooseDevice')}</h3>
-                    {devices.length === 0 && devicesLoaded && !busy && <p>{tr('emptyDevices')}</p>}
-                    {devices.map(item => (
-                        <button
-                            type="button"
-                            className="tt-remote-chat__list-item"
-                            key={item.device_id}
-                            disabled={busy}
-                            onClick={() => void connect(item)}
-                        >
-                            <strong>{item.device_name || item.device_id}</strong>
-                            <span>{item.platform || item.last_known_address || item.device_id}</span>
-                        </button>
-                    ))}
-                    {(busy || !devicesLoaded) && <p>{tr('loading')}</p>}
-                </div>
-            )}
-
-            {mode === 'client' && view === 'owners' && catalog && (
-                <div className="tt-remote-chat__list">
-                    <button type="button" className="tt-remote-chat__back" onClick={() => void disconnect()}>
-                        {tr('disconnect')}
-                    </button>
-                    <h3>{tr('chooseCharacter')}</h3>
-                    <h4>{tr('characters')}</h4>
-                    {catalog.characters.map(character => (
-                        <button
-                            type="button"
-                            className="tt-remote-chat__list-item"
-                            key={character.characterName}
-                            disabled={busy}
-                            onClick={() => void chooseOwner({
-                                kind: 'character',
-                                characterName: character.characterName,
-                            })}
-                        >
-                            <strong>{character.displayName}</strong>
-                        </button>
-                    ))}
-                    <h4>{tr('groups')}</h4>
-                    {catalog.groups.map(group => (
-                        <button
-                            type="button"
-                            className="tt-remote-chat__list-item"
-                            key={group.groupId}
-                            disabled={busy}
-                            onClick={() => void chooseOwner({ kind: 'group', groupId: group.groupId })}
-                        >
-                            <strong>{group.name}</strong>
-                        </button>
-                    ))}
-                    {busy && <p>{tr('loading')}</p>}
-                </div>
-            )}
-
-            {mode === 'client' && view === 'chats' && (
-                <div className="tt-remote-chat__list">
-                    <button type="button" className="tt-remote-chat__back" onClick={() => setView('owners')}>
-                        {tr('back')}
-                    </button>
-                    <h3>{selectedOwnerName}</h3>
-                    {chats.length === 0 && !busy && <p>{tr('emptyChats')}</p>}
-                    {chats.map((chat, index) => (
-                        <button
-                            type="button"
-                            className="tt-remote-chat__list-item"
-                            key={`${chat.title}:${index}`}
-                            disabled={busy}
-                            onClick={() => void chooseChat(chat)}
-                        >
-                            <strong>{chat.title}</strong>
-                            <span>{chat.preview}</span>
-                        </button>
-                    ))}
-                    {busy && <p>{tr('loading')}</p>}
-                </div>
-            )}
-
-            {mode === 'client' && view === 'conversation' && (
-                <RemoteChatConversation
+            {mode === 'client' && (
+                <RemoteChatClientView
+                    view={view}
+                    devices={devices}
+                    devicesLoaded={devicesLoaded}
+                    busy={busy}
+                    catalog={catalog}
+                    selectedOwnerName={selectedOwnerName}
+                    chats={chats}
                     title={selectedChatTitle}
                     messages={messages}
+                    hasOlderHistory={hasOlderHistory}
+                    loadingOlderHistory={loadingOlderHistory}
                     draft={draft}
                     active={Boolean(activeRequestId)}
-                    busy={busy}
-                    onDraftChange={setDraft}
-                    onBack={() => setView('chats')}
+                    onConnect={device => void connect(device)}
                     onDisconnect={() => void disconnect()}
+                    onChooseOwner={owner => void chooseOwner(owner)}
+                    onChooseChat={chat => void chooseChat(chat)}
+                    onBackToOwners={() => setView('owners')}
+                    onBackToChats={() => setView('chats')}
+                    onDraftChange={setDraft}
                     onSend={() => void send()}
                     onStop={() => void stopGeneration()}
+                    onLoadOlder={() => void loadOlderHistory()}
                     tr={tr}
                 />
             )}

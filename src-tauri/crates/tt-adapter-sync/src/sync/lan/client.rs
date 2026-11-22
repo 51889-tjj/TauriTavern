@@ -18,6 +18,7 @@ use crate::sync::lan::server::{
     LAN_PULL_REQUEST_OVERWRITE_POLICY_FEATURE_V1, LAN_PULL_REQUEST_SELECTION_FEATURE_V1,
 };
 use crate::sync::lan::store::LanPeerStore;
+use tt_contracts::chat::ChatPayloadCursor;
 use tt_contracts::client_asset_paths::MAX_MOBILE_THIRD_PARTY_ASSET_BYTES;
 use tt_contracts::lan_discovery::LanDiscoveryAnnouncement;
 use tt_contracts::remote_chat::{
@@ -401,6 +402,7 @@ impl LanSyncClient {
         session_token: &SessionToken,
         remote_session_id: &str,
         target: RemoteChatTarget,
+        before_cursor: Option<ChatPayloadCursor>,
     ) -> Result<RemoteChatHistory, DomainError> {
         let response = self
             .inner
@@ -413,6 +415,7 @@ impl LanSyncClient {
             .json(&RemoteChatHistoryRequest {
                 session_id: remote_session_id.to_string(),
                 target,
+                before_cursor,
             })
             .send()
             .await

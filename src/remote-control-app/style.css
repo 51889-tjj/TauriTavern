@@ -1,0 +1,639 @@
+:root {
+    color-scheme: dark;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    --tt-remote-bg: #111318;
+    --tt-remote-surface: #1a1d24;
+    --tt-remote-surface-raised: #222630;
+    --tt-remote-border: #343945;
+    --tt-remote-text: #f2f3f7;
+    --tt-remote-muted: #a5aab7;
+    --tt-remote-accent: #a49bff;
+    --tt-remote-accent-strong: #7468ed;
+    --tt-remote-danger: #ff9d9d;
+    --SmartThemeBodyColor: var(--tt-remote-text);
+    --SmartThemeBorderColor: var(--tt-remote-border);
+    --SmartThemeQuoteColor: var(--tt-remote-surface-raised);
+    --SmartThemeBlurTintColor: var(--tt-remote-surface);
+    --SmartThemeUnderlineColor: var(--tt-remote-danger);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#remote-root {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    min-height: 100%;
+    margin: 0;
+}
+
+body {
+    overflow: hidden;
+    color: var(--tt-remote-text);
+    background: var(--tt-remote-bg);
+    overscroll-behavior: none;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--tt-remote-accent);
+    outline-offset: 2px;
+}
+
+.tt-remote-app {
+    display: flex;
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    flex-direction: column;
+    padding:
+        max(8px, env(safe-area-inset-top))
+        0
+        max(6px, env(safe-area-inset-bottom));
+    background:
+        radial-gradient(ellipse at 12% -20%, rgb(116 104 237 / 16%), transparent 54%),
+        var(--tt-remote-bg);
+}
+
+.tt-remote-app__header {
+    display: flex;
+    min-height: 78px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 9px 18px 12px;
+}
+
+.tt-remote-app__brand > span {
+    color: var(--tt-remote-accent);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .16em;
+}
+
+.tt-remote-app__brand h1 {
+    margin: 3px 0 1px;
+    font-size: 21px;
+    font-weight: 750;
+    letter-spacing: -.025em;
+}
+
+.tt-remote-app__brand p {
+    margin: 0;
+    color: var(--tt-remote-muted);
+    font-size: 12px;
+}
+
+.tt-remote-app__brand small {
+    color: var(--tt-remote-muted);
+    font-size: 10px;
+}
+
+.tt-remote-app__disconnect {
+    min-height: 37px;
+    border: 1px solid var(--tt-remote-border);
+    border-radius: 999px;
+    padding: 0 12px;
+    color: var(--tt-remote-muted);
+    background: rgb(26 29 36 / 82%);
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.tt-remote-app__disconnect:disabled {
+    opacity: .58;
+}
+
+.tt-remote-app__error {
+    margin: 0 16px 8px;
+    border: 1px solid rgb(255 157 157 / 36%);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: var(--tt-remote-danger);
+    background: rgb(255 157 157 / 8%);
+    overflow-wrap: anywhere;
+    font-size: 13px;
+}
+
+.tt-remote-app__content {
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 4px 14px 18px;
+    scrollbar-width: thin;
+}
+
+.tt-remote-app__tabs {
+    display: grid;
+    flex: 0 0 auto;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    border-top: 1px solid rgb(255 255 255 / 6%);
+    padding: 8px 8px 2px;
+    background: rgb(17 19 24 / 96%);
+}
+
+.tt-remote-app__tabs button {
+    display: flex;
+    min-width: 0;
+    min-height: 50px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border: 0;
+    border-radius: 12px;
+    padding: 4px 2px;
+    color: var(--tt-remote-muted);
+    background: transparent;
+    font-size: 10px;
+    font-weight: 650;
+}
+
+.tt-remote-app__tabs button[aria-pressed="true"] {
+    color: var(--tt-remote-accent);
+    background: rgb(164 155 255 / 10%);
+}
+
+.tt-remote-app__tab-icon {
+    height: 21px;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.tt-remote-error {
+    display: grid;
+    min-height: 100dvh;
+    align-content: center;
+    gap: 10px;
+    padding: 28px;
+}
+
+.tt-remote-error h1 {
+    margin: 0;
+    font-size: 22px;
+}
+
+.tt-remote-error p {
+    margin: 0;
+    color: var(--tt-remote-muted);
+    overflow-wrap: anywhere;
+}
+
+.tt-remote-page {
+    display: flex;
+    min-height: 100%;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px 2px 14px;
+}
+
+.tt-remote-page__heading,
+.tt-card__heading,
+.tt-inline-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.tt-remote-page__heading h2 {
+    margin: 2px 0 0;
+    font-size: 22px;
+    letter-spacing: -.02em;
+}
+
+.tt-remote-page__eyebrow {
+    margin: 0;
+    color: var(--tt-remote-accent);
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+.tt-remote-page__description,
+.tt-card__heading p {
+    margin: 0;
+    color: var(--tt-remote-muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.tt-button {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--tt-remote-border);
+    border-radius: 12px;
+    padding: 9px 13px;
+    color: var(--tt-remote-text);
+    background: var(--tt-remote-surface-raised);
+    font-weight: 700;
+}
+
+.tt-button--primary {
+    border-color: transparent;
+    color: white;
+    background: linear-gradient(135deg, #8175f2, #6357d4);
+    box-shadow: 0 8px 18px rgb(79 68 190 / 20%);
+}
+
+.tt-button--quiet {
+    min-height: 36px;
+    padding: 7px 11px;
+    color: var(--tt-remote-muted);
+    background: transparent;
+    font-size: 12px;
+}
+
+.tt-button--danger {
+    border-color: rgb(255 157 157 / 30%);
+    color: var(--tt-remote-danger);
+    background: rgb(255 157 157 / 7%);
+}
+
+.tt-button--small {
+    min-height: 34px;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+.tt-button:disabled,
+.tt-text-button:disabled {
+    cursor: not-allowed;
+    opacity: .5;
+}
+
+.tt-button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.tt-message {
+    margin: 0;
+    border: 1px solid rgb(164 155 255 / 25%);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: #d2ceff;
+    background: rgb(164 155 255 / 8%);
+    overflow-wrap: anywhere;
+    font-size: 13px;
+}
+
+.tt-message--error {
+    border-color: rgb(255 157 157 / 36%);
+    color: var(--tt-remote-danger);
+    background: rgb(255 157 157 / 8%);
+}
+
+.tt-empty {
+    margin: 0;
+    border: 1px dashed var(--tt-remote-border);
+    border-radius: 14px;
+    padding: 20px 14px;
+    color: var(--tt-remote-muted);
+    text-align: center;
+    font-size: 13px;
+}
+
+.tt-card-list,
+.tt-panel-stack,
+.tt-settings-editor {
+    display: grid;
+    gap: 9px;
+}
+
+.tt-card {
+    min-width: 0;
+    border: 1px solid var(--tt-remote-border);
+    border-radius: 15px;
+    padding: 14px;
+    background: linear-gradient(145deg, rgb(34 38 48 / 92%), rgb(26 29 36 / 96%));
+    box-shadow: 0 10px 26px rgb(0 0 0 / 12%);
+}
+
+.tt-form-card {
+    display: grid;
+    gap: 13px;
+}
+
+.tt-card__heading {
+    align-items: flex-start;
+}
+
+.tt-card__heading h3,
+.tt-card__heading p {
+    margin: 0;
+}
+
+.tt-card__heading h3 {
+    margin-bottom: 4px;
+    font-size: 16px;
+}
+
+.tt-field {
+    display: grid;
+    min-width: 0;
+    gap: 6px;
+    color: var(--tt-remote-muted);
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.tt-field input,
+.tt-field select,
+.tt-field textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 43px;
+    border: 1px solid var(--tt-remote-border);
+    border-radius: 11px;
+    padding: 10px 11px;
+    color: var(--tt-remote-text);
+    background: #13161c;
+    font-size: 14px;
+    font-weight: 450;
+}
+
+.tt-field textarea {
+    min-height: 84px;
+    resize: vertical;
+    line-height: 1.45;
+}
+
+.tt-field input:disabled,
+.tt-field select:disabled,
+.tt-field textarea:disabled {
+    opacity: .6;
+}
+
+.tt-field-hint {
+    margin: 0;
+    color: var(--tt-remote-muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.tt-toggle-row {
+    display: flex;
+    min-height: 53px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid rgb(255 255 255 / 6%);
+    padding: 2px 0 10px;
+    color: var(--tt-remote-text);
+}
+
+.tt-toggle-row:last-child {
+    border-bottom: 0;
+}
+
+.tt-toggle-row > span {
+    display: grid;
+    gap: 4px;
+}
+
+.tt-toggle-row strong {
+    font-size: 13px;
+}
+
+.tt-toggle-row small {
+    color: var(--tt-remote-muted);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.tt-toggle-row input {
+    width: 43px;
+    height: 25px;
+    flex: 0 0 auto;
+    accent-color: var(--tt-remote-accent-strong);
+}
+
+.tt-state {
+    color: var(--tt-remote-muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.tt-state.is-active {
+    color: #8fe0b5;
+}
+
+.tt-extension-card,
+.tt-extension-card__action,
+.tt-connection-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.tt-extension-card__copy,
+.tt-connection-card__copy {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+}
+
+.tt-extension-card__copy strong,
+.tt-connection-card__copy strong {
+    overflow-wrap: anywhere;
+    font-size: 14px;
+}
+
+.tt-extension-card__copy span,
+.tt-connection-card__copy span,
+.tt-connection-card__copy small {
+    color: var(--tt-remote-muted);
+    font-size: 11px;
+}
+
+.tt-extension-card__action {
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.tt-connection-card {
+    width: 100%;
+    color: var(--tt-remote-text);
+    text-align: left;
+}
+
+.tt-connection-card__copy small {
+    max-width: 245px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tt-connection-card__chevron {
+    color: var(--tt-remote-muted);
+    font-size: 26px;
+}
+
+.tt-text-button {
+    border: 0;
+    padding: 3px;
+    color: var(--tt-remote-accent);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.tt-text-button--danger {
+    color: var(--tt-remote-danger);
+}
+
+.tt-extension-card__management {
+    display: flex;
+    gap: 8px;
+}
+
+.tt-segmented,
+.tt-settings-nav {
+    display: flex;
+    gap: 6px;
+    overflow: auto;
+    scrollbar-width: none;
+}
+
+.tt-segmented::-webkit-scrollbar,
+.tt-settings-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.tt-segmented button,
+.tt-settings-nav button {
+    min-height: 36px;
+    flex: 0 0 auto;
+    border: 1px solid var(--tt-remote-border);
+    border-radius: 999px;
+    padding: 7px 12px;
+    color: var(--tt-remote-muted);
+    background: var(--tt-remote-surface);
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.tt-segmented button[aria-pressed="true"],
+.tt-settings-nav button[aria-selected="true"] {
+    border-color: rgb(164 155 255 / 50%);
+    color: white;
+    background: rgb(164 155 255 / 14%);
+}
+
+.tt-settings-save {
+    position: sticky;
+    bottom: 5px;
+    width: 100%;
+    min-height: 48px;
+    margin-top: 2px;
+}
+
+.tt-inline-heading {
+    align-items: flex-start;
+}
+
+.tt-remote-chat {
+    height: 100%;
+    min-height: 0;
+    color: var(--tt-remote-text);
+}
+
+.tt-remote-chat button,
+.tt-remote-chat textarea {
+    color: var(--tt-remote-text);
+}
+
+.tt-remote-chat button {
+    border-color: var(--tt-remote-border);
+    border-radius: 11px;
+    background: var(--tt-remote-surface-raised);
+}
+
+.tt-remote-chat__header h2 {
+    font-size: 18px;
+}
+
+.tt-remote-chat__conversation {
+    min-height: 0;
+}
+
+.tt-remote-chat__messages {
+    padding: 8px 2px;
+}
+
+.tt-remote-chat__load-older {
+    align-self: center;
+    min-height: 36px !important;
+    border-radius: 999px !important;
+    padding: 6px 12px !important;
+    color: var(--tt-remote-accent) !important;
+    background: rgb(164 155 255 / 9%) !important;
+    font-size: 12px !important;
+}
+
+.tt-remote-chat__message {
+    border: 1px solid rgb(255 255 255 / 5%);
+    border-radius: 14px;
+}
+
+.tt-remote-chat__message.is-user {
+    background: #343045;
+}
+
+.tt-remote-chat__composer textarea {
+    min-height: 45px;
+    border-color: var(--tt-remote-border);
+    border-radius: 13px;
+    background: #13161c;
+    resize: none;
+}
+
+.tt-remote-chat__composer button {
+    min-height: 45px;
+    border-radius: 13px;
+    background: var(--tt-remote-accent-strong);
+}
+
+.tt-remote-chat__error {
+    border-radius: 11px;
+}
+
+@media (min-width: 700px) {
+    .tt-remote-app {
+        width: min(100%, 760px);
+        margin-inline: auto;
+        border-inline: 1px solid rgb(255 255 255 / 5%);
+    }
+
+    .tt-remote-app__content {
+        padding-inline: 22px;
+    }
+}

@@ -1539,25 +1539,7 @@ async function onUpdateClick() {
  */
 async function updateExtension(extensionName, quiet) {
     try {
-        const response = await fetch('/api/extensions/update', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({
-                extensionName,
-                global: getExtensionType(extensionName) === 'global',
-            }),
-        });
-
-        if (!response.ok) {
-            const text = await response.text();
-            const normalized = stripCommandErrorPrefixes(text || response.statusText);
-            const message = toUserFacingErrorText(normalized) || normalized || response.statusText;
-            toastr.error(message, t`Extension update failed`, { timeOut: 5000 });
-            console.error('Extension update failed', response.status, response.statusText, text);
-            return;
-        }
-
-        const data = await response.json();
+        const data = await updateExtensionOnComputer(extensionName);
 
         if (!quiet) {
             void showExtensionsDetails();
@@ -1568,13 +1550,52 @@ async function updateExtension(extensionName, quiet) {
                 toastr.success('Extension is already up to date');
             }
         } else {
-            const fullExtensionName = extensionName.startsWith('third-party') ? extensionName : `third-party${extensionName}`;
-            await callExtensionHook(fullExtensionName, 'update');
             toastr.success(t`Extension ${extensionName} updated to ${data.shortCommitHash}`, t`Reload the page to apply updates`);
         }
     } catch (error) {
         console.error('Extension update error:', error);
+        toastr.error(toUserFacingErrorText(error), t`Extension update failed`, { timeOut: 5000 });
     }
+}
+
+async function updateExtensionOnComputer(extensionName) {
+    const response = await fetch('/api/extensions/update', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({
+            extensionName,
+            global: getExtensionType(extensionName) === 'global',
+        }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        const normalized = stripCommandErrorPrefixes(text || response.statusText);
+        throw new Error(toUserFacingErrorText(normalized) || normalized || response.statusText);
+    }
+
+    const data = await response.json();
+    if (!data.isUpToDate) {
+        const fullExtensionName = extensionName.startsWith('third-party') ? extensionName : `third-party${extensionName}`;
+        await callExtensionHook(fullExtensionName, 'update');
+    }
+    return data;
+}
+
+export async function updateExtensionFromRemote(extensionName) {
+    const type = getExtensionType(extensionName);
+    if (!['local', 'global'].includes(type)) {
+        throw new Error(`Only installed third-party extensions can be updated: ${extensionName}`);
+    }
+    if (type === 'global' && !isAdmin()) {
+        throw new Error(t`You don't have permission to update global extensions.`);
+    }
+
+    const result = await updateExtensionOnComputer(extensionName);
+    return {
+        isUpToDate: result.isUpToDate === true,
+        shortCommitHash: String(result.shortCommitHash || ''),
+        reloadRequired: result.isUpToDate !== true,
+    };
 }
 
 /**
@@ -1739,6 +1760,17 @@ async function moveExtension(extensionName, source, destination) {
  * @param {boolean} [shouldClean=false] Whether to also run the 'clean' hook before deleting
  */
 export async function deleteExtension(extensionName, shouldClean = false) {
+    try {
+        await deleteExtensionOnComputer(extensionName, shouldClean);
+        toastr.success(t`Extension ${extensionName} deleted`);
+        delay(1000).then(() => location.reload());
+    } catch (error) {
+        toastr.error(toUserFacingErrorText(error), t`Extension deletion failed`, { timeOut: 5000 });
+        console.error('Extension deletion error:', error);
+    }
+}
+
+async function deleteExtensionOnComputer(extensionName, shouldClean) {
     const fullExtensionName = extensionName.startsWith('third-party') ? extensionName : `third-party${extensionName}`;
 
     if (shouldClean) {
@@ -1747,24 +1779,36 @@ export async function deleteExtension(extensionName, shouldClean = false) {
 
     await callExtensionHook(fullExtensionName, 'delete');
 
-    try {
-        await fetch('/api/extensions/delete', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({
-                extensionName,
-                global: getExtensionType(extensionName) === 'global',
-            }),
-        });
-    } catch (error) {
-        console.error('Error:', error);
+    const response = await fetch('/api/extensions/delete', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({
+            extensionName,
+            global: getExtensionType(extensionName) === 'global',
+        }),
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        const normalized = stripCommandErrorPrefixes(text || response.statusText);
+        throw new Error(toUserFacingErrorText(normalized) || normalized || response.statusText);
     }
 
     // Delete or clean might have updated settings, which could race with the page reload, so we'll force save here
     await saveSettings();
+}
 
-    toastr.success(t`Extension ${extensionName} deleted`);
+export async function deleteExtensionFromRemote(extensionName) {
+    const type = getExtensionType(extensionName);
+    if (!['local', 'global'].includes(type)) {
+        throw new Error(`Only installed third-party extensions can be deleted: ${extensionName}`);
+    }
+    if (type === 'global' && !isAdmin()) {
+        throw new Error(t`You don't have permission to delete global extensions.`);
+    }
+
+    await deleteExtensionOnComputer(extensionName, false);
     delay(1000).then(() => location.reload());
+    return { deleted: true, reloadRequired: true };
 }
 
 /**
@@ -1971,6 +2015,14 @@ export async function installExtension(url, global, branch = '') {
     }
 
     return true;
+}
+
+export async function installExtensionFromRemote(url, branch = '') {
+    const installed = await installExtension(url, false, branch);
+    if (!installed) {
+        throw new Error('Extension installation was cancelled or failed on the computer');
+    }
+    return { installed: true, reloadRequired: true };
 }
 
 /**
