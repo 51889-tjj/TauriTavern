@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/tauritavern",
+    "crates/remote-chat-shell",
     "crates/tt-domain",
     "crates/tt-contracts",
     "crates/tt-ports",

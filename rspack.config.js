@@ -122,6 +122,30 @@ function createSharedConfig(mode, name) {
   };
 }
 
+function createRemoteChatShellConfig(mode) {
+  const development = mode === 'development';
+  return {
+    ...createSharedConfig(mode, 'remote-chat-shell'),
+    entry: {
+      app: './remote-chat-shell/src/main.tsx',
+    },
+    output: {
+      filename: 'app.js',
+      cssFilename: 'app.css',
+      path: path.resolve(__dirname, 'remote-chat-shell/public/assets'),
+      publicPath: './',
+      module: true,
+      clean: true,
+    },
+    module: {
+      rules: [
+        ...createReactModule(development).rules,
+        { test: /\.css$/, type: 'css' },
+      ],
+    },
+  };
+}
+
 export function createRspackConfigs(mode = 'production') {
   const development = mode === 'development';
 
@@ -248,4 +272,9 @@ export function createRspackConfigs(mode = 'production') {
   ];
 }
 
-export default (_env, argv = {}) => createRspackConfigs(argv.mode ?? 'production');
+export default (env = {}, argv = {}) => {
+  const mode = argv.mode ?? 'production';
+  return env.remoteChatShell
+    ? [createRemoteChatShellConfig(mode)]
+    : createRspackConfigs(mode);
+};

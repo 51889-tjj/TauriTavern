@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const HOST = 'src-tauri/crates/tauritavern/src/';
+const HOSTS = new Set([
+    'src-tauri/crates/tauritavern/src/',
+    'src-tauri/crates/remote-chat-shell/src/',
+]);
 const IDENTITY = 'src/scripts/util/host-identity.js';
 const HOST_IDENTITY_OWNERS = new Set([IDENTITY, 'src/tauri/web-host/install.js']);
 const FRONTEND_DOC = 'docs/FrontendGuide.md §2.1（宿主身份）';
@@ -250,7 +253,7 @@ function scanRust(file, source) {
     const report = reporter(file, source);
     const tokens = rustTokens(source);
     const identityScopes = rustIdentityScopes(tokens);
-    const host = file.startsWith(HOST);
+    const host = [...HOSTS].some(prefix => file.startsWith(prefix));
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
         if (['cfg', 'cfg_attr'].includes(token.value)) {

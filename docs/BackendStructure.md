@@ -49,6 +49,7 @@ src-tauri/
 ├── resources/
 └── crates/
     ├── tauritavern
+    ├── remote-chat-shell
     ├── tt-domain
     ├── tt-contracts
     ├── tt-ports
@@ -68,11 +69,12 @@ src-tauri/
     └── tt-adapter-archive
 ```
 
-当前 host 不再承载所有后端实现；用例、端口、契约、领域和具体 adapter 已经被拆成独立 Cargo crate。后续维护重点不是继续追求更多 crate，而是避免边界回流，确保每个新增能力都落在正确变化轴上。
+`remote-chat-shell` 是轻量 Remote Chat iOS 产品的独立 host，不是完整 TauriTavern 的移动构建目标。主 host 仍是默认 member；两个 host 复用同一 application service、contracts 与 adapter。当前 host 不再承载所有后端实现；用例、端口、契约、领域和具体 adapter 已经被拆成独立 Cargo crate。后续维护重点不是继续追求更多 crate，而是避免边界回流，确保每个新增能力都落在正确变化轴上。
 
 | crate | 当前职责 |
 | --- | --- |
 | `tauritavern` | Tauri host、presentation command、composition root、host-bound infrastructure、platform glue |
+| `remote-chat-shell` | 独立的 Remote Chat 客户端 host；只装配配对、证书固定客户端和 Remote Chat UI，不承载完整数据/模型 host |
 | `tt-domain` | 领域模型、值对象、领域错误、纯规则 |
 | `tt-contracts` | DTO、事件、payload、通用值契约、observability contract |
 | `tt-ports` | repository / gateway / runtime trait、Host Resource opened-source port |
@@ -167,7 +169,7 @@ SillyTavern frontend / extension / script
 
 ## 6. Host 边界
 
-`tauritavern` 是最外层 host crate。它可以知道所有 concrete implementation，但只应在明确边界处使用它们。
+`tauritavern` 与 `remote-chat-shell` 是最外层 host crate。它们可以知道所需的 concrete implementation，但只应在 composition root 的明确边界处使用它们；Remote Chat shell 只依赖远程聊天所需的 adapter，不组装完整产品能力。
 
 主要目录：
 
@@ -226,7 +228,7 @@ src-tauri/crates/tauritavern/src/
 
 ### 6.4 平台事实
 
-编译目标只在 host crate 读取：`platform/identity.rs` 的 `HOST_IDENTITY`（`HostPlatform` + `HostKind`，类型在 `tt-contracts::host`）是唯一来源，同时注入前端（见 `docs/FrontendHostContract.md` §2.2）。
+编译目标只在 host crate 读取：`tauritavern` 与独立 `remote-chat-shell` 各自的 `platform/identity.rs` 以 `HOST_IDENTITY`（`HostPlatform` + `HostKind`，类型在 `tt-contracts::host`）作为本 host 的唯一来源。完整 TauriTavern 将它注入主前端（见 `docs/FrontendHostContract.md` §2.2）；轻量壳只使用自身的编译目标身份。
 
 - `HostKind` 取 Tauri 的 `desktop` / `mobile` 编译别名，与命令和插件的门控一致。OpenHarmony 的 `target_os` 是 `linux`，以 `target_env = "ohos"` 区分。
 - host 内外壳类别用 `cfg(desktop)` / `cfg(mobile)`，系统 API 用 `target_os` / `target_env`。`Cargo.toml` 的 target 依赖表看不到这两个别名，是唯一需要写完整平台组合的地方。
@@ -271,10 +273,10 @@ adapter 是外层细节，但不是可以任意堆放的 common bucket。一个 
 | 新跨 crate payload/event/DTO | `tt-contracts` | 只放契约，不放 service |
 | 新 repository/gateway/runtime trait | `tt-ports` | trait 面向 application；具体实现不在这里 |
 | 新用例、业务编排、job coordinator | `tt-application` | 依赖 port，不依赖 adapter |
-| 新 Tauri command | `tauritavern/src/presentation/commands` | 调 service，不直接操作仓储细节 |
-| 新 service/adapter 装配 | `tauritavern/src/app/composition` | 显式构造，避免 DI 容器或自动注册魔法 |
-| 需要 AppHandle/WebView/plugin/platform API | `tauritavern/src/app`、`infrastructure` 或 `platform` | 不下沉到 adapter |
-| 按平台区分的行为 | `tauritavern/src/app/composition` 注入 | 非 host crate 不读平台，见 §6.4 |
+| 新 Tauri command | 对应 host 的 `src/presentation/commands` | 调 service，不直接操作仓储细节 |
+| 新 service/adapter 装配 | 对应 host 的 `src/app/composition` | 显式构造，避免 DI 容器或自动注册魔法 |
+| 需要 AppHandle/WebView/plugin/platform API | 对应 host 的 `src/app`、`infrastructure` 或 `platform` | 不下沉到 adapter |
+| 按平台区分的行为 | 对应 host 的 composition root 注入 | 非 host crate 不读平台，见 §6.4 |
 | data root/default-user 的基础文件仓储 | `tt-adapter-storage-core` | chat/settings/user/theme/secret 等基础存储 |
 | 角色卡、世界书、Agent workspace/profile、Skill package | `tt-adapter-storage-userdata` | skill 是 local package store，不是普通 JSON repo |
 | 第三方扩展安装、更新、发现 | `tt-adapter-extension` | 不归入 storage-userdata |

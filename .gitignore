@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+remote-chat-shell/public/assets/
+src-tauri/crates/remote-chat-shell/gen/
 .cache
 *.local
 .playwright-mcp

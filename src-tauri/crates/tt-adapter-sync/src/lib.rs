@@ -1,6 +1,7 @@
 mod json_file;
 
 pub mod lan_sync;
+pub mod remote_chat_shell;
 pub mod sync;
 pub mod sync_automation_store;
 mod sync_fs;

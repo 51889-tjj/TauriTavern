@@ -1,0 +1,174 @@
+:root {
+    color-scheme: dark;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #f1f2f6;
+    background: #111318;
+    --SmartThemeBodyColor: #f1f2f6;
+    --SmartThemeBorderColor: #353943;
+    --SmartThemeQuoteColor: #252a35;
+    --SmartThemeBlurTintColor: #191c23;
+    --SmartThemeUnderlineColor: #ff7b7b;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+
+button,
+textarea {
+    font: inherit;
+}
+
+.shell-app {
+    width: 100%;
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    background: #111318;
+}
+
+.shell-loading {
+    display: grid;
+    height: 100%;
+    place-items: center;
+    color: #c5c8d1;
+}
+
+.shell-app .tt-remote-chat {
+    gap: 10px;
+    padding: 12px;
+}
+
+.shell-app .tt-remote-chat__header {
+    min-height: 44px;
+}
+
+.shell-app .tt-remote-chat__conversation-header {
+    min-height: 44px;
+}
+
+.shell-app .tt-remote-chat__messages {
+    overscroll-behavior: contain;
+}
+
+.shell-app .tt-remote-chat__composer textarea {
+    min-height: 44px;
+    max-height: 26dvh;
+    resize: none;
+    font-size: 16px;
+}
+
+.shell-pair {
+    display: flex;
+    width: min(520px, 100%);
+    height: 100%;
+    flex-direction: column;
+    gap: 16px;
+    margin: 0 auto;
+    padding: 30px 20px calc(24px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+}
+
+.shell-brand {
+    display: grid;
+    width: 54px;
+    height: 54px;
+    place-items: center;
+    border: 1px solid #41495b;
+    border-radius: 16px;
+    background: #202634;
+    color: #dce5ff;
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.shell-pair h1,
+.shell-pair p {
+    margin: 0;
+}
+
+.shell-pair h1 {
+    font-size: 26px;
+}
+
+.shell-pair__description,
+.shell-pair__steps {
+    color: #c5c8d1;
+    line-height: 1.55;
+}
+
+.shell-pair__steps {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding-left: 23px;
+}
+
+.shell-pair__label {
+    margin-bottom: -9px;
+    color: #c5c8d1;
+    font-size: 14px;
+}
+
+.shell-pair textarea {
+    min-height: 88px;
+    max-height: 180px;
+    padding: 10px 12px;
+    border: 1px solid #353943;
+    border-radius: 10px;
+    background: #191c23;
+    color: #f1f2f6;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+    resize: vertical;
+}
+
+.shell-primary,
+.shell-secondary {
+    min-height: 48px;
+    padding: 10px 14px;
+    border: 1px solid #41495b;
+    border-radius: 11px;
+    color: #f1f2f6;
+}
+
+.shell-primary {
+    background: #34496e;
+    font-weight: 700;
+}
+
+.shell-secondary {
+    background: #20232b;
+}
+
+.shell-primary:disabled {
+    opacity: 0.55;
+}
+
+.shell-pair__scan {
+    min-height: 54px;
+    margin-top: 2px;
+}
+
+.shell-error {
+    color: #ff9292;
+    overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+    }
+}

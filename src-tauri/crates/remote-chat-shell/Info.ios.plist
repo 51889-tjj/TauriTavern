@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan the computer's LAN pairing QR code to connect Remote Chat.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connect to your TauriTavern computer on your local network for Remote Chat.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_tauritavern._tcp</string>
+	</array>
+</dict>
+</plist>

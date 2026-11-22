@@ -51,13 +51,14 @@
 
 ## 实施状态
 
-当前原型包含 Remote Chat DTO、LAN HTTPS 路由、已配对设备客户端、桌面标准发送桥，以及扩展菜单中的第一方聊天面板。Host 与 client API 均通过 `window.__TAURITAVERN__.api.remoteChat` 暴露。
+当前实现包含 Remote Chat DTO、LAN HTTPS 路由、已配对设备客户端、桌面标准发送桥，以及桌面扩展内的 Remote Chat 面板。`remote-chat-shell/` 是独立 iOS 客户端：复用同一聊天 UI、Rust 客户端服务和证书固定传输，不依赖完整 `tauritavern` host crate。手机只持有配对身份/主机凭据和当前界面状态；角色、聊天、设置、模型与扩展仍以桌面数据为准。
 
-当前验证限于 Windows 开发环境的 TypeScript、前端 lint 与 Rspack 构建。iOS 应用构建需要 macOS/Xcode；TrollStore workflow 生成未签名 IPA，不需要 Apple 开发者证书。真机局域网验收仍需一台处于 TrollStore 支持范围内、且已与桌面设备配对的 iPhone；桌面与手机端的完整端到端行为尚未在真机上确认。
+独立壳的前端构建命令为 `node scripts/remote-chat-shell.mjs web:build`；Codemagic 的 `remote-chat-shell-ios-trollstore` workflow 构建独立 Bundle ID 的未签名 IPA。iOS 构建需要 macOS/Xcode。真机验收仍需在电脑上开启 Remote Chat、批准一次手机配对请求，并在同一局域网连接。
 
 ## 原型打包
 
 - Windows 桌面安装包：在仓库根目录运行 `pnpm run tauri:build`。这只在 `src-tauri/target/` 生成构建产物，不会安装、覆盖现有应用或操作用户数据。
 - TrollStore IPA：`.github/workflows/remote-chat-ios-trollstore.yml` 使用 macOS runner，通过 Tauri iOS CLI 的 `--no-sign` 构建并上传 IPA artifact。推送 `remote-chat-lan-mvp` 分支会触发构建；也可手动运行并填写 `source_ref`。该 workflow 位于 fork 中，且尚未在 GitHub runner 上实测。
-- Codemagic 替代构建：仓库根目录的 `codemagic.yaml` 提供手动触发的 macOS/Xcode 构建，不依赖 GitHub Actions；在 Codemagic 连接 fork 后选择 `remote-chat-ios-trollstore` workflow 即可。
+- 完整 TauriTavern iOS 原型：Codemagic 的 `remote-chat-ios-trollstore` workflow。
+- 独立轻量 iOS 壳：Codemagic 的 `remote-chat-shell-ios-trollstore` workflow，产物使用 Bundle ID `com.tauritavern.remotechat`，不会替换现有 TauriTavern App。
 - TrollStore 官方支持范围受 iOS 版本限制；IPA 构建成功不代表所有 iOS 版本都能安装。

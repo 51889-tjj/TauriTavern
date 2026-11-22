@@ -9555,6 +9555,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "tt-remote-chat-shell"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-barcode-scanner",
+ "tokio",
+ "tracing",
+ "tt-adapter-sync",
+ "tt-application",
+ "tt-contracts",
+ "tt-domain",
+ "tt-ports",
+ "ttsync-contract",
+]
+
+[[package]]
 name = "ttsync-client"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
