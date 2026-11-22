@@ -49,7 +49,7 @@ src-tauri/
 ├── resources/
 └── crates/
     ├── tauritavern
-    ├── remote-chat-shell
+    ├── remote-chat-shell (独立 Cargo workspace，不是根 workspace member)
     ├── tt-domain
     ├── tt-contracts
     ├── tt-ports
@@ -69,12 +69,12 @@ src-tauri/
     └── tt-adapter-archive
 ```
 
-`remote-chat-shell` 是轻量 Remote Chat iOS 产品的独立 host，不是完整 TauriTavern 的移动构建目标。主 host 仍是默认 member；两个 host 复用同一 application service、contracts 与 adapter。当前 host 不再承载所有后端实现；用例、端口、契约、领域和具体 adapter 已经被拆成独立 Cargo crate。后续维护重点不是继续追求更多 crate，而是避免边界回流，确保每个新增能力都落在正确变化轴上。
+`remote-chat-shell` 是轻量 Remote Chat iOS 产品的独立 host，不是完整 TauriTavern 的移动构建目标。它位于 `crates/remote-chat-shell` 以复用同一仓库源码，但声明自己的 Cargo workspace 并从根 workspace 排除，避免 iOS/Xcode 构建选中完整 `tauritavern` 默认包。主 host 仍是根 workspace 的默认 member；两个 host 复用同一 application service、contracts 与 adapter。当前 host 不再承载所有后端实现；用例、端口、契约、领域和具体 adapter 已经被拆成独立 Cargo crate。后续维护重点不是继续追求更多 crate，而是避免边界回流，确保每个新增能力都落在正确变化轴上。
 
 | crate | 当前职责 |
 | --- | --- |
 | `tauritavern` | Tauri host、presentation command、composition root、host-bound infrastructure、platform glue |
-| `remote-chat-shell` | 独立的 Remote Chat 客户端 host；只装配配对、证书固定客户端和 Remote Chat UI，不承载完整数据/模型 host |
+| `remote-chat-shell` | 独立 Cargo workspace 的 Remote Chat 客户端 host；只装配配对、证书固定客户端和 Remote Chat UI，不承载完整数据/模型 host |
 | `tt-domain` | 领域模型、值对象、领域错误、纯规则 |
 | `tt-contracts` | DTO、事件、payload、通用值契约、observability contract |
 | `tt-ports` | repository / gateway / runtime trait、Host Resource opened-source port |

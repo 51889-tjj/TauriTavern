@@ -5,6 +5,9 @@ description = "Lightweight iOS Remote Chat client for TauriTavern"
 authors = ["TauriTavern Team"]
 edition = "2024"
 
+[workspace]
+resolver = "3"
+
 [lib]
 name = "tt_remote_chat_shell"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -18,13 +21,13 @@ tauri-build = { version = "2.7.2", features = [] }
 
 [dependencies]
 async-trait = "0.1"
-tauri = { workspace = true }
+tauri = "2.12.3"
 tt-application = { path = "../tt-application" }
 tt-adapter-sync = { path = "../tt-adapter-sync" }
 tt-contracts = { path = "../tt-contracts" }
 tt-domain = { path = "../tt-domain" }
 tt-ports = { path = "../tt-ports" }
-ttsync-contract = { workspace = true }
+ttsync-contract = "2"
 tokio = { version = "1", default-features = false, features = ["fs", "macros", "rt", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1"
 

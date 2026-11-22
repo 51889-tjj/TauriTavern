@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "crates/tauritavern",
-    "crates/remote-chat-shell",
     "crates/tt-domain",
     "crates/tt-contracts",
     "crates/tt-ports",
@@ -20,6 +19,9 @@ members = [
     "crates/tt-adapter-workspace-shell",
     "crates/tt-adapter-triviumdb",
 ]
+# This product-specific Tauri host owns a separate workspace to keep iOS Xcode
+# builds from selecting the full application's default member.
+exclude = ["crates/remote-chat-shell"]
 default-members = ["crates/tauritavern"]
 resolver = "3"
 
