@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import {
+    createReadStream,
+    existsSync,
+    readFileSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import process from 'node:process';
@@ -56,6 +62,42 @@ const result = spawnSync(process.execPath, [command, ...commandArgs], {
 if (result.error) {
     console.error(result.error.message);
     process.exit(1);
+}
+
+if (!webBuild && !webDev && args[0] === 'ios' && args[1] === 'init' && result.status === 0) {
+    const projectFile = path.join(shellRoot, 'gen', 'apple', 'project.yml');
+    const project = readFileSync(projectFile, 'utf8');
+    const buildPhaseName = '        name: Build Rust Code';
+    const buildPhaseIndex = project.indexOf(buildPhaseName);
+    const scriptMarker = '      - script: |\n';
+    const scriptStart = project.lastIndexOf(scriptMarker, buildPhaseIndex);
+    if (buildPhaseIndex < 0 || scriptStart < 0) {
+        console.error(`Cannot locate Tauri's Xcode Rust build phase in ${projectFile}.`);
+        process.exit(1);
+    }
+
+    const exports = [
+        '          export TAURI_APP_PATH="${SRCROOT}/../.."',
+        '          export TAURI_FRONTEND_PATH="${SRCROOT}/../../../../.."',
+        '',
+    ].join('\n');
+    if (!project.slice(scriptStart, buildPhaseIndex).includes('export TAURI_APP_PATH=')) {
+        const insertAt = scriptStart + scriptMarker.length;
+        writeFileSync(projectFile, `${project.slice(0, insertAt)}${exports}${project.slice(insertAt)}`);
+        const xcodegen = spawnSync(
+            'xcodegen',
+            ['generate', '--spec', projectFile],
+            { cwd: path.dirname(projectFile), stdio: 'inherit', env: process.env },
+        );
+        if (xcodegen.error) {
+            console.error(xcodegen.error.message);
+            process.exit(1);
+        }
+        if (xcodegen.status !== 0) {
+            process.exit(xcodegen.status ?? 1);
+        }
+        console.log('Configured Xcode to use the standalone Remote Chat shell paths.');
+    }
 }
 
 if (webDev && result.status === 0) {
