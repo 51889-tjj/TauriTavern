@@ -26,7 +26,8 @@ unsafe fn disable_content_inset_adjustment(wkwebview: &objc2::runtime::AnyObject
 
     let scroll_view: Retained<UIScrollView> = objc2::msg_send![wkwebview, scrollView];
     let zero_insets = unsafe { UIEdgeInsetsZero };
-    scroll_view.setContentInsetAdjustmentBehavior(UIScrollViewContentInsetAdjustmentBehavior::Never);
+    scroll_view
+        .setContentInsetAdjustmentBehavior(UIScrollViewContentInsetAdjustmentBehavior::Never);
     scroll_view.setContentInset(zero_insets);
     scroll_view.setScrollIndicatorInsets(zero_insets);
     scroll_view.setAutomaticallyAdjustsScrollIndicatorInsets(false);

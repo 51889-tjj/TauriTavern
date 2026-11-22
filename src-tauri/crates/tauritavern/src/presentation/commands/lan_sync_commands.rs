@@ -99,6 +99,7 @@ pub async fn lan_sync_get_pairing_info(
 pub struct LanSyncPairedDeviceDto {
     pub device_id: String,
     pub device_name: String,
+    pub platform: Option<String>,
     pub last_known_address: Option<String>,
     pub paired_at_ms: u64,
     pub last_sync_ms: Option<u64>,
@@ -109,6 +110,7 @@ impl From<LanSyncPairedDeviceSummary> for LanSyncPairedDeviceDto {
         Self {
             device_id: device.device_id,
             device_name: device.device_name,
+            platform: device.platform,
             last_known_address: device.last_known_address,
             paired_at_ms: device.paired_at_ms,
             last_sync_ms: device.last_sync_ms,
@@ -336,4 +338,24 @@ fn generate_qr_svg(text: &str) -> Result<String, tt_domain::errors::DomainError>
         .render::<qrcode::render::svg::Color>()
         .min_dimensions(200, 200)
         .build())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LanSyncPairedDeviceDto;
+    use tt_domain::models::lan_sync::LanSyncPairedDeviceSummary;
+
+    #[test]
+    fn paired_device_command_dto_exposes_platform_for_mobile_host_selection() {
+        let dto = LanSyncPairedDeviceDto::from(LanSyncPairedDeviceSummary {
+            device_id: "desktop-1".to_string(),
+            device_name: "My PC".to_string(),
+            platform: Some("windows".to_string()),
+            last_known_address: Some("https://192.168.1.2:59681".to_string()),
+            paired_at_ms: 1,
+            last_sync_ms: None,
+        });
+
+        assert_eq!(dto.platform.as_deref(), Some("windows"));
+    }
 }
