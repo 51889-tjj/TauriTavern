@@ -54,9 +54,6 @@ workflows:
           cp "$ipa_path" artifacts/TauriTavern-RemoteChat-Shell-TrollStore.ipa
     artifacts:
       - artifacts/TauriTavern-RemoteChat-Shell-TrollStore.ipa
-    publishing:
-      email:
-        recipients: []
   remote-chat-ios-trollstore:
     name: TauriTavern Remote Chat (TrollStore IPA)
     max_build_duration: 120
