@@ -16,6 +16,7 @@ use tauri::http::header::{
 use tt_application::services::host_resource_service::{
     HostResourceDeliveryCapabilities, HostResourceResponse, HostResourceService,
 };
+use tt_contracts::client_asset_paths::MAX_MOBILE_THIRD_PARTY_ASSET_BYTES;
 
 const WRY_DELIVERY: HostResourceDeliveryCapabilities = resource_delivery(false);
 #[cfg(any(dev, debug_assertions))]
@@ -31,7 +32,9 @@ const fn resource_delivery(over_ipc: bool) -> HostResourceDeliveryCapabilities {
         | HostPlatform::Ohos => HostResourceDeliveryCapabilities::new(true, false),
     };
     match HOST_IDENTITY.kind {
-        HostKind::Mobile => delivery.with_max_third_party_asset_bytes(32 * 1024 * 1024),
+        HostKind::Mobile => {
+            delivery.with_max_third_party_asset_bytes(MAX_MOBILE_THIRD_PARTY_ASSET_BYTES as u64)
+        }
         HostKind::Desktop => delivery,
     }
 }

@@ -27,7 +27,10 @@ use tt_contracts::remote_chat::{
     RemoteChatChatsRequest, RemoteChatEventsRequest, RemoteChatHistoryRequest,
     RemoteChatSessionRequest, RemoteChatStopRequest, RemoteChatSubmitRequest,
 };
-use tt_contracts::remote_control::{RemoteControlInvokeRequest, RemoteControlSettingsRequest};
+use tt_contracts::remote_control::{
+    RemoteControlChatPayloadRequest, RemoteControlInvokeRequest, RemoteControlResourceRequest,
+    RemoteControlSettingsRequest,
+};
 use tt_contracts::sync::PAIRING_REJECTED_MESSAGE;
 use tt_contracts::sync::SyncOperationOptions;
 use tt_domain::errors::DomainError;
@@ -138,6 +141,14 @@ pub async fn spawn_lan_sync_server(
         .route(
             "/v2/remote-control/settings",
             post(handle_remote_control_settings),
+        )
+        .route(
+            "/v2/remote-control/chat-payload",
+            post(handle_remote_control_chat_payload),
+        )
+        .route(
+            "/v2/remote-control/extension-resource",
+            post(handle_remote_control_extension_resource),
         )
         .layer(DefaultBodyLimit::max(320 * 1024));
 
@@ -511,6 +522,71 @@ async fn handle_remote_control_settings(
         })
 }
 
+async fn handle_remote_control_chat_payload(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteControlChatPayloadRequest>,
+) -> Result<Response, ApiError> {
+    authenticate_remote_session(&state, &headers).await?;
+    let bytes = state
+        .remote_control
+        .get_chat_payload(request)
+        .await
+        .map_err(ApiError::from)?;
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, "application/json")
+        .body(Body::from(bytes))
+        .map_err(|error| {
+            ApiError::from(DomainError::InternalError(format!(
+                "Failed to build Remote Control chat response: {error}"
+            )))
+        })
+}
+
+async fn handle_remote_control_extension_resource(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteControlResourceRequest>,
+) -> Result<Response, ApiError> {
+    authenticate_remote_session(&state, &headers).await?;
+    let is_head = request.method.eq_ignore_ascii_case("HEAD");
+    let resource = state
+        .remote_control
+        .get_extension_resource(request)
+        .await
+        .map_err(ApiError::from)?;
+    let status = StatusCode::from_u16(resource.status).map_err(|error| {
+        ApiError::from(DomainError::InternalError(format!(
+            "Invalid Remote Control resource status: {error}"
+        )))
+    })?;
+    let mut builder = Response::builder().status(status);
+    for name in [
+        "accept-ranges",
+        "allow",
+        "cache-control",
+        "content-length",
+        "content-range",
+        "content-type",
+        "etag",
+        "last-modified",
+    ] {
+        if let Some(value) = resource.headers.get(name) {
+            if is_head && name == "content-length" {
+                builder = builder.header("x-tauritavern-resource-content-length", value);
+            } else {
+                builder = builder.header(name, value);
+            }
+        }
+    }
+    builder.body(Body::from(resource.body)).map_err(|error| {
+        ApiError::from(DomainError::InternalError(format!(
+            "Failed to build Remote Control extension response: {error}"
+        )))
+    })
+}
+
 #[derive(Debug)]
 struct ApiError {
     error: DomainError,
@@ -653,6 +729,25 @@ mod tests {
             &self,
             _session_id: &str,
         ) -> Result<Vec<u8>, DomainError> {
+            Err(DomainError::Conflict(
+                "Remote Control is disabled in this test".to_string(),
+            ))
+        }
+
+        async fn get_chat_payload(
+            &self,
+            _request: tt_contracts::remote_control::RemoteControlChatPayloadRequest,
+        ) -> Result<Vec<u8>, DomainError> {
+            Err(DomainError::Conflict(
+                "Remote Control is disabled in this test".to_string(),
+            ))
+        }
+
+        async fn get_extension_resource(
+            &self,
+            _request: tt_contracts::remote_control::RemoteControlResourceRequest,
+        ) -> Result<tt_contracts::remote_control::RemoteControlResourceResponse, DomainError>
+        {
             Err(DomainError::Conflict(
                 "Remote Control is disabled in this test".to_string(),
             ))
@@ -1053,6 +1148,44 @@ mod tests {
             .send()
             .await
             .expect("unauthenticated settings request");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let response = client
+            .http()
+            .post(
+                client
+                    .endpoint_url("/v2/remote-control/chat-payload")
+                    .expect("Remote Control chat URL"),
+            )
+            .json(&RemoteControlChatPayloadRequest {
+                session_id: "control-session".to_string(),
+                target: tt_contracts::remote_control::RemoteControlChatTarget::Character {
+                    character_id: "character".to_string(),
+                    file_name: "chat".to_string(),
+                },
+                allow_not_found: false,
+            })
+            .send()
+            .await
+            .expect("unauthenticated chat request");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let response = client
+            .http()
+            .post(
+                client
+                    .endpoint_url("/v2/remote-control/extension-resource")
+                    .expect("Remote Control resource URL"),
+            )
+            .json(&RemoteControlResourceRequest {
+                session_id: "control-session".to_string(),
+                method: "GET".to_string(),
+                path: "/scripts/extensions/third-party/example/manifest.json".to_string(),
+                headers: Default::default(),
+            })
+            .send()
+            .await
+            .expect("unauthenticated resource request");
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         handle.shutdown();

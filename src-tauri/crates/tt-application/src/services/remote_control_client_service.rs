@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 use tt_contracts::remote_control::{
-    RemoteControlInvokeRequest, RemoteControlOperation, RemoteControlSessionStatus,
-    RemoteControlValue,
+    RemoteControlChatPayloadRequest, RemoteControlChatTarget, RemoteControlInvokeRequest,
+    RemoteControlOperation, RemoteControlResourceRequest, RemoteControlResourceResponse,
+    RemoteControlSessionStatus, RemoteControlValue,
 };
 use tt_domain::errors::DomainError;
 use tt_ports::lan_sync::LanPeerRepository;
@@ -13,7 +14,13 @@ use tt_ports::remote_control::{RemoteControlClientConnector, RemoteControlClient
 pub struct RemoteControlClientService {
     peer_repository: Arc<dyn LanPeerRepository>,
     connector: Arc<dyn RemoteControlClientConnector>,
-    sessions: Mutex<HashMap<String, Arc<dyn RemoteControlClientSession>>>,
+    sessions: Mutex<HashMap<String, ConnectedRemoteControlSession>>,
+}
+
+struct ConnectedRemoteControlSession {
+    // The session-scoped resource origin uses this to resolve the pinned client.
+    session_id: String,
+    client: Arc<dyn RemoteControlClientSession>,
 }
 
 impl RemoteControlClientService {
@@ -49,10 +56,14 @@ impl RemoteControlClientService {
                 "The selected device does not have an active Remote Control session".to_string(),
             ));
         }
-        self.sessions
-            .lock()
-            .await
-            .insert(device_id.to_string(), client);
+        let session_id = status
+            .session_id
+            .clone()
+            .expect("active Remote Control status has a session id");
+        self.sessions.lock().await.insert(
+            device_id.to_string(),
+            ConnectedRemoteControlSession { session_id, client },
+        );
         Ok(status)
     }
 
@@ -95,6 +106,48 @@ impl RemoteControlClientService {
             .await
     }
 
+    pub async fn get_chat_payload(
+        &self,
+        device_id: &str,
+        session_id: &str,
+        target: RemoteControlChatTarget,
+        allow_not_found: bool,
+    ) -> Result<Vec<u8>, DomainError> {
+        self.client(device_id)
+            .await?
+            .get_chat_payload(RemoteControlChatPayloadRequest {
+                session_id: session_id.to_string(),
+                target,
+                allow_not_found,
+            })
+            .await
+    }
+
+    pub async fn get_extension_resource(
+        &self,
+        session_id: &str,
+        request: RemoteControlResourceRequest,
+    ) -> Result<RemoteControlResourceResponse, DomainError> {
+        if request.session_id != session_id {
+            return Err(DomainError::AuthenticationError(
+                "Remote Control resource session does not match its URL".to_string(),
+            ));
+        }
+        let client = self
+            .sessions
+            .lock()
+            .await
+            .values()
+            .find(|session| session.session_id == session_id)
+            .map(|session| session.client.clone())
+            .ok_or_else(|| {
+                DomainError::Conflict(format!(
+                    "Remote Control is not connected to session {session_id}"
+                ))
+            })?;
+        client.get_extension_resource(request).await
+    }
+
     async fn client(
         &self,
         device_id: &str,
@@ -103,7 +156,7 @@ impl RemoteControlClientService {
             .lock()
             .await
             .get(device_id)
-            .cloned()
+            .map(|session| session.client.clone())
             .ok_or_else(|| {
                 DomainError::Conflict(format!(
                     "Remote Control is not connected to paired device {device_id}"

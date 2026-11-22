@@ -18,6 +18,7 @@ use crate::sync::lan::server::{
     LAN_PULL_REQUEST_OVERWRITE_POLICY_FEATURE_V1, LAN_PULL_REQUEST_SELECTION_FEATURE_V1,
 };
 use crate::sync::lan::store::LanPeerStore;
+use tt_contracts::client_asset_paths::MAX_MOBILE_THIRD_PARTY_ASSET_BYTES;
 use tt_contracts::lan_discovery::LanDiscoveryAnnouncement;
 use tt_contracts::remote_chat::{
     RemoteChatCatalog, RemoteChatChatsRequest, RemoteChatEventsPage, RemoteChatEventsRequest,
@@ -26,8 +27,10 @@ use tt_contracts::remote_chat::{
     RemoteChatSubmitResponse, RemoteChatSummary, RemoteChatTarget,
 };
 use tt_contracts::remote_control::{
-    REMOTE_CONTROL_MAX_SETTINGS_BYTES, RemoteControlInvokeRequest, RemoteControlSessionStatus,
-    RemoteControlSettingsRequest, RemoteControlValue,
+    REMOTE_CONTROL_MAX_CHAT_PAYLOAD_BYTES, REMOTE_CONTROL_MAX_SETTINGS_BYTES,
+    RemoteControlChatPayloadRequest, RemoteControlInvokeRequest, RemoteControlResourceRequest,
+    RemoteControlResourceResponse, RemoteControlSessionStatus, RemoteControlSettingsRequest,
+    RemoteControlValue,
 };
 use tt_contracts::sync::SyncOperationOptions;
 use tt_domain::errors::DomainError;
@@ -262,6 +265,81 @@ impl LanSyncClient {
             .map_err(|error| DomainError::Transient(error.to_string()))?;
         let response = ensure_success(response, "Remote Control settings read failed").await?;
         read_remote_control_bytes(response, REMOTE_CONTROL_MAX_SETTINGS_BYTES).await
+    }
+
+    pub async fn remote_control_chat_payload(
+        &self,
+        session_token: &SessionToken,
+        request: &RemoteControlChatPayloadRequest,
+    ) -> Result<Vec<u8>, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(self.inner.endpoint_url("/v2/remote-control/chat-payload")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(request)
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        let response = ensure_success(response, "Remote Control chat read failed").await?;
+        read_remote_control_bytes(response, REMOTE_CONTROL_MAX_CHAT_PAYLOAD_BYTES).await
+    }
+
+    pub async fn remote_control_extension_resource(
+        &self,
+        session_token: &SessionToken,
+        request: &RemoteControlResourceRequest,
+    ) -> Result<RemoteControlResourceResponse, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(
+                self.inner
+                    .endpoint_url("/v2/remote-control/extension-resource")?,
+            )
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(request)
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        let status = response.status().as_u16();
+        let head_content_length = response
+            .headers()
+            .get("x-tauritavern-resource-content-length")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        let mut headers = std::collections::BTreeMap::new();
+        for name in [
+            reqwest::header::ACCEPT_RANGES,
+            reqwest::header::ALLOW,
+            reqwest::header::CACHE_CONTROL,
+            reqwest::header::CONTENT_LENGTH,
+            reqwest::header::CONTENT_RANGE,
+            reqwest::header::CONTENT_TYPE,
+            reqwest::header::ETAG,
+            reqwest::header::LAST_MODIFIED,
+        ] {
+            if let Some(value) = response.headers().get(&name)
+                && let Ok(value) = value.to_str()
+            {
+                headers.insert(name.as_str().to_string(), value.to_string());
+            }
+        }
+        if let Some(content_length) = head_content_length {
+            headers.insert("content-length".to_string(), content_length);
+        }
+        let body = read_remote_control_bytes(response, MAX_MOBILE_THIRD_PARTY_ASSET_BYTES).await?;
+        Ok(RemoteControlResourceResponse {
+            status,
+            headers,
+            body,
+        })
     }
 
     pub async fn remote_chat_catalog(

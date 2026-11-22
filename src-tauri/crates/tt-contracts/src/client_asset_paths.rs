@@ -8,6 +8,7 @@ pub const ASSETS_ROUTE_PREFIX: &str = "/assets/";
 pub const USER_IMAGES_ROUTE_PREFIX: &str = "/user/images/";
 pub const USER_FILES_ROUTE_PREFIX: &str = "/user/files/";
 pub const THIRD_PARTY_EXTENSION_ROUTE_PREFIX: &str = "/scripts/extensions/third-party/";
+pub const MAX_MOBILE_THIRD_PARTY_ASSET_BYTES: usize = 32 * 1024 * 1024;
 pub const USER_CSS_ROUTE: &str = "/css/user.css";
 pub const THUMBNAIL_ROUTE_PATH: &str = "/thumbnail";
 

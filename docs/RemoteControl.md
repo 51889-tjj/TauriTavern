@@ -6,9 +6,9 @@
 
 独立 iOS App 已从 Remote Chat 单页迁移为打包 `src/index.html` 的完整移动前端。启动时先显示配对/连接门；连接成功后，前端通过配对设备的 TLS 固定会话操作电脑。
 
-当前第一条远程控制闭环覆盖 TauriTavern / SillyTavern 设置读取与写入、设置分块提交、Persona、脱敏密钥状态与密钥写入/删除、LLM 连接 CRUD、主题、Quick Reply 和模型预设；主机只执行显式列入 `RemoteControlOperation` 的操作。角色/聊天资源、二进制资源传输、完整生成与扩展/Agent/MCP 操作仍未接通，不能据此称为全功能验收完成。
+当前第一条远程控制闭环覆盖 TauriTavern / SillyTavern 设置读取与写入、设置分块提交、Persona、脱敏密钥状态与密钥写入/删除、LLM 连接 CRUD、主题、Quick Reply、模型预设，以及角色/群组目录、最近聊天和只读聊天历史。主机只执行显式列入 `RemoteControlOperation` 的操作。第三方扩展静态资源通过受限的原生资源协议读取；聊天与扩展资源使用独立、有大小上限的二进制通道。聊天写入、用户数据资源、完整生成与扩展/Agent/MCP 操作仍未接通，不能据此称为全功能验收完成。
 
-当前操作枚举具体允许启动就绪状态、版本与启动 metadata、背景目录/metadata 列表、设置读写/提交、Persona、扩展目录与内置模板读取、活动 Agent Run 列表、密钥状态/写入/删除、LLM 连接读写、模型连接状态、主题、Quick Reply 与预设读写。完整 SillyTavern 设置通过独立、有大小上限的二进制路由读取。枚举外的命令（包括生成、文件、角色/聊天写入和系统插件调用）会明确拒绝；背景和头像二进制资源仍未传输。
+当前操作枚举具体允许启动就绪状态、版本与启动 metadata、背景目录/metadata 列表、设置读写/提交、Persona、扩展目录与内置模板读取、角色/群组目录、最近聊天摘要、活动 Agent Run 列表、密钥状态/写入/删除、LLM 连接读写、模型连接状态、主题、Quick Reply 与预设读写。完整 SillyTavern 设置和只读聊天历史使用独立、有大小上限的二进制路由（分别为 32 MiB 与 64 MiB）。第三方扩展文件只通过桌面 Host Resource Service 的 `/scripts/extensions/third-party/*` 文件级读取语义传输，单个资源上限 32 MiB；不开放任意文件路径或 HTTP 代理。枚举外的命令（包括生成、文件、角色/聊天写入和系统插件调用）会明确拒绝；头像、背景等用户资源仍未传输。
 
 ## 现状与边界
 

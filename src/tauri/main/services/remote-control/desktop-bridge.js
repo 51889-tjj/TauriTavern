@@ -26,6 +26,24 @@ async function invokeOperation(operation, { safeInvoke, invokeTransport }) {
             return safeInvoke('get_bootstrap_metadata');
         case 'get_extensions':
             return safeInvoke('get_extensions');
+        case 'get_all_characters':
+            return safeInvoke('get_all_characters', { shallow: operation.shallow ?? true });
+        case 'get_all_groups':
+            return safeInvoke('get_all_groups');
+        case 'list_recent_chat_summaries':
+            return safeInvoke('list_recent_chat_summaries', {
+                character_filter: operation.characterFilter ?? null,
+                include_metadata: operation.includeMetadata ?? false,
+                max_entries: operation.maxEntries ?? null,
+                pinned: operation.pinned ?? null,
+            });
+        case 'list_recent_group_chat_summaries':
+            return safeInvoke('list_recent_group_chat_summaries', {
+                chat_ids: operation.chatIds ?? null,
+                include_metadata: operation.includeMetadata ?? false,
+                max_entries: operation.maxEntries ?? null,
+                pinned: operation.pinned ?? null,
+            });
         case 'get_all_backgrounds':
             return safeInvoke('get_all_backgrounds');
         case 'get_all_background_metadata':

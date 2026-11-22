@@ -7,7 +7,7 @@ use tt_contracts::remote_chat::{
     RemoteChatTarget,
 };
 use tt_contracts::remote_control::{
-    RemoteControlOperation, RemoteControlSessionStatus, RemoteControlValue,
+    RemoteControlChatTarget, RemoteControlOperation, RemoteControlSessionStatus, RemoteControlValue,
 };
 
 use crate::app::composition::ShellServices;
@@ -235,6 +235,22 @@ pub(crate) async fn remote_control_client_get_sillytavern_settings(
     let bytes = services
         .remote_control_client
         .get_sillytavern_settings(&device_id, &session_id)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[tauri::command]
+pub(crate) async fn remote_control_client_get_chat_payload(
+    services: State<'_, Arc<ShellServices>>,
+    device_id: String,
+    session_id: String,
+    target: RemoteControlChatTarget,
+    allow_not_found: bool,
+) -> Result<tauri::ipc::Response, String> {
+    let bytes = services
+        .remote_control_client
+        .get_chat_payload(&device_id, &session_id, target, allow_not_found)
         .await
         .map_err(|error| error.to_string())?;
     Ok(tauri::ipc::Response::new(bytes))

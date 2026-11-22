@@ -65,6 +65,26 @@ export function toRemoteControlOperation(command, args, options) {
             return { kind: 'get_bootstrap_metadata' };
         case 'get_extensions':
             return { kind: 'get_extensions' };
+        case 'get_all_characters':
+            return { kind: 'get_all_characters', shallow: args?.shallow ?? null };
+        case 'get_all_groups':
+            return { kind: 'get_all_groups' };
+        case 'list_recent_chat_summaries':
+            return {
+                kind: 'list_recent_chat_summaries',
+                characterFilter: args?.character_filter ?? args?.characterFilter ?? null,
+                includeMetadata: args?.include_metadata ?? args?.includeMetadata ?? null,
+                maxEntries: args?.max_entries ?? args?.maxEntries ?? null,
+                pinned: args?.pinned ?? null,
+            };
+        case 'list_recent_group_chat_summaries':
+            return {
+                kind: 'list_recent_group_chat_summaries',
+                chatIds: args?.chat_ids ?? args?.chatIds ?? null,
+                includeMetadata: args?.include_metadata ?? args?.includeMetadata ?? null,
+                maxEntries: args?.max_entries ?? args?.maxEntries ?? null,
+                pinned: args?.pinned ?? null,
+            };
         case 'get_all_backgrounds':
             return { kind: 'get_all_backgrounds' };
         case 'get_all_background_metadata':

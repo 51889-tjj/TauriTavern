@@ -9,7 +9,8 @@ use tt_contracts::remote_chat::{
     RemoteChatTarget,
 };
 use tt_contracts::remote_control::{
-    RemoteControlInvokeRequest, RemoteControlSessionStatus, RemoteControlValue,
+    RemoteControlChatPayloadRequest, RemoteControlInvokeRequest, RemoteControlResourceRequest,
+    RemoteControlResourceResponse, RemoteControlSessionStatus, RemoteControlValue,
 };
 use tt_domain::errors::DomainError;
 use tt_domain::models::lan_sync::{LanSyncIdentity, LanSyncPairedDevice};
@@ -179,6 +180,24 @@ impl RemoteControlClientSession for HttpRemoteChatClientSession {
     async fn get_sillytavern_settings(&self, session_id: &str) -> Result<Vec<u8>, DomainError> {
         self.client
             .remote_control_settings(&self.session_token().await?, session_id)
+            .await
+    }
+
+    async fn get_chat_payload(
+        &self,
+        request: RemoteControlChatPayloadRequest,
+    ) -> Result<Vec<u8>, DomainError> {
+        self.client
+            .remote_control_chat_payload(&self.session_token().await?, &request)
+            .await
+    }
+
+    async fn get_extension_resource(
+        &self,
+        request: RemoteControlResourceRequest,
+    ) -> Result<RemoteControlResourceResponse, DomainError> {
+        self.client
+            .remote_control_extension_resource(&self.session_token().await?, &request)
             .await
     }
 

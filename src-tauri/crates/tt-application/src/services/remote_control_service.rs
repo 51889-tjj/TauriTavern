@@ -1,19 +1,37 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
+use http::header::{HeaderName, HeaderValue};
+use http::{Method, Request};
 use tokio::sync::{Mutex, oneshot};
+use tt_contracts::client_asset_paths::{
+    MAX_MOBILE_THIRD_PARTY_ASSET_BYTES, THIRD_PARTY_EXTENSION_ROUTE_PREFIX,
+};
 use tt_contracts::remote_control::{
-    REMOTE_CONTROL_MAX_OPERATION_BYTES, REMOTE_CONTROL_MAX_PENDING_REQUESTS,
-    REMOTE_CONTROL_MAX_REQUEST_ID_CHARS, REMOTE_CONTROL_MAX_RESULT_BYTES,
-    REMOTE_CONTROL_MAX_SETTINGS_BYTES, REMOTE_CONTROL_REQUEST_TIMEOUT_SECS,
+    REMOTE_CONTROL_MAX_CHAT_PAYLOAD_BYTES, REMOTE_CONTROL_MAX_OPERATION_BYTES,
+    REMOTE_CONTROL_MAX_PENDING_REQUESTS, REMOTE_CONTROL_MAX_REQUEST_ID_CHARS,
+    REMOTE_CONTROL_MAX_RESULT_BYTES, REMOTE_CONTROL_MAX_SETTINGS_BYTES,
+    REMOTE_CONTROL_REQUEST_TIMEOUT_SECS, RemoteControlChatPayloadRequest, RemoteControlChatTarget,
     RemoteControlDesktopCommand, RemoteControlInvokeRequest, RemoteControlInvokeResult,
-    RemoteControlOutcome, RemoteControlSessionStatus, RemoteControlValue,
+    RemoteControlOutcome, RemoteControlResourceRequest, RemoteControlResourceResponse,
+    RemoteControlSessionStatus, RemoteControlValue,
 };
 use tt_domain::errors::DomainError;
 use tt_ports::remote_control::{RemoteControlApi, RemoteControlCommandPublisher};
+use tt_ports::repositories::chat_commit_repository::ChatCommitRepository;
 
 use super::settings_service::SettingsService;
+use crate::dto::chat_history_dto::ChatHistoryLocator;
+use crate::services::chat_commit_service::open_chat_payload_json;
+use crate::services::host_resource_service::{
+    HostResourceDeliveryCapabilities, HostResourceService,
+};
+
+const CHAT_PAYLOAD_READ_CHUNK_BYTES: usize = 4 * 1024 * 1024;
+const REMOTE_EXTENSION_DELIVERY: HostResourceDeliveryCapabilities =
+    HostResourceDeliveryCapabilities::new(true, false)
+        .with_max_third_party_asset_bytes(MAX_MOBILE_THIRD_PARTY_ASSET_BYTES as u64);
 
 type PendingResponse = oneshot::Sender<Result<RemoteControlValue, String>>;
 
@@ -26,6 +44,8 @@ struct RemoteControlRuntime {
 pub struct RemoteControlService {
     command_publisher: Arc<dyn RemoteControlCommandPublisher>,
     settings_service: Arc<SettingsService>,
+    chat_commit_repository: Arc<dyn ChatCommitRepository>,
+    host_resources: Arc<HostResourceService>,
     runtime: Mutex<RemoteControlRuntime>,
 }
 
@@ -33,10 +53,14 @@ impl RemoteControlService {
     pub fn new(
         command_publisher: Arc<dyn RemoteControlCommandPublisher>,
         settings_service: Arc<SettingsService>,
+        chat_commit_repository: Arc<dyn ChatCommitRepository>,
+        host_resources: Arc<HostResourceService>,
     ) -> Self {
         Self {
             command_publisher,
             settings_service,
+            chat_commit_repository,
+            host_resources,
             runtime: Mutex::new(RemoteControlRuntime::default()),
         }
     }
@@ -77,11 +101,7 @@ impl RemoteControlService {
     }
 
     async fn read_sillytavern_settings(&self, session_id: &str) -> Result<Vec<u8>, DomainError> {
-        if self.runtime.lock().await.session_id.as_deref() != Some(session_id) {
-            return Err(DomainError::AuthenticationError(
-                "Remote Control session is not active".to_string(),
-            ));
-        }
+        self.ensure_active_session(session_id).await?;
         let settings = self
             .settings_service
             .get_sillytavern_settings()
@@ -97,6 +117,128 @@ impl RemoteControlService {
             ));
         }
         Ok(settings.bytes.as_ref().clone())
+    }
+
+    async fn read_chat_payload(
+        &self,
+        request: RemoteControlChatPayloadRequest,
+    ) -> Result<Vec<u8>, DomainError> {
+        self.ensure_active_session(&request.session_id).await?;
+        let locator = match request.target {
+            RemoteControlChatTarget::Character {
+                character_id,
+                file_name,
+            } => ChatHistoryLocator::Character {
+                character_id,
+                file_name,
+            },
+            RemoteControlChatTarget::Group { chat_id } => ChatHistoryLocator::Group { chat_id },
+        };
+        let Some(mut reader) = open_chat_payload_json(
+            self.chat_commit_repository.as_ref(),
+            locator,
+            request.allow_not_found,
+        )
+        .await
+        .map_err(DomainError::from)?
+        else {
+            return Ok(b"[]".to_vec());
+        };
+
+        let mut payload = Vec::new();
+        let mut buffer = vec![0; CHAT_PAYLOAD_READ_CHUNK_BYTES];
+        loop {
+            let bytes_read = reader.read(&mut buffer).await?;
+            if bytes_read == 0 {
+                break;
+            }
+            if bytes_read > buffer.len() {
+                return Err(DomainError::InvalidData(
+                    "Chat payload reader returned an invalid byte count".to_string(),
+                ));
+            }
+            if payload.len().saturating_add(bytes_read) > REMOTE_CONTROL_MAX_CHAT_PAYLOAD_BYTES {
+                return Err(DomainError::InvalidData(
+                    "Chat payload exceeds the Remote Control transfer limit".to_string(),
+                ));
+            }
+            payload.extend_from_slice(&buffer[..bytes_read]);
+        }
+        Ok(payload)
+    }
+
+    async fn read_extension_resource(
+        &self,
+        request: RemoteControlResourceRequest,
+    ) -> Result<RemoteControlResourceResponse, DomainError> {
+        self.ensure_active_session(&request.session_id).await?;
+        if !request.path.starts_with(THIRD_PARTY_EXTENSION_ROUTE_PREFIX) {
+            return Err(DomainError::InvalidData(
+                "Remote Control can read only third-party extension assets".to_string(),
+            ));
+        }
+        if request.path.len() > 8 * 1024 {
+            return Err(DomainError::InvalidData(
+                "Remote extension resource path exceeds the allowed size".to_string(),
+            ));
+        }
+
+        let method = Method::from_bytes(request.method.as_bytes()).map_err(|error| {
+            DomainError::InvalidData(format!("Invalid remote resource method: {error}"))
+        })?;
+        let mut builder = Request::builder().method(method).uri(&request.path);
+        for (name, value) in request.headers {
+            if !is_forwardable_resource_header(&name) {
+                continue;
+            }
+            let name = HeaderName::from_bytes(name.as_bytes()).map_err(|error| {
+                DomainError::InvalidData(format!("Invalid remote resource header: {error}"))
+            })?;
+            let value = HeaderValue::from_str(&value).map_err(|error| {
+                DomainError::InvalidData(format!("Invalid remote resource header value: {error}"))
+            })?;
+            builder = builder.header(name, value);
+        }
+        let request = builder.body(Vec::new()).map_err(|error| {
+            DomainError::InvalidData(format!(
+                "Invalid remote extension resource request: {error}"
+            ))
+        })?;
+        let response = self
+            .host_resources
+            .serve(&request, REMOTE_EXTENSION_DELIVERY);
+        let status = response.status().as_u16();
+        let mut headers = BTreeMap::new();
+        for name in [
+            http::header::ACCEPT_RANGES,
+            http::header::ALLOW,
+            http::header::CACHE_CONTROL,
+            http::header::CONTENT_LENGTH,
+            http::header::CONTENT_RANGE,
+            http::header::CONTENT_TYPE,
+            http::header::ETAG,
+            http::header::LAST_MODIFIED,
+        ] {
+            if let Some(value) = response.headers().get(&name)
+                && let Ok(value) = value.to_str()
+            {
+                headers.insert(name.as_str().to_string(), value.to_string());
+            }
+        }
+        Ok(RemoteControlResourceResponse {
+            status,
+            headers,
+            body: response.into_body(),
+        })
+    }
+
+    async fn ensure_active_session(&self, session_id: &str) -> Result<(), DomainError> {
+        if self.runtime.lock().await.session_id.as_deref() != Some(session_id) {
+            return Err(DomainError::AuthenticationError(
+                "Remote Control session is not active".to_string(),
+            ));
+        }
+        Ok(())
     }
 
     async fn invoke_operation(
@@ -219,6 +361,20 @@ impl RemoteControlApi for RemoteControlService {
         self.read_sillytavern_settings(session_id).await
     }
 
+    async fn get_chat_payload(
+        &self,
+        request: RemoteControlChatPayloadRequest,
+    ) -> Result<Vec<u8>, DomainError> {
+        self.read_chat_payload(request).await
+    }
+
+    async fn get_extension_resource(
+        &self,
+        request: RemoteControlResourceRequest,
+    ) -> Result<RemoteControlResourceResponse, DomainError> {
+        self.read_extension_resource(request).await
+    }
+
     async fn invoke(
         &self,
         request: RemoteControlInvokeRequest,
@@ -244,6 +400,13 @@ fn validate_request(request: &RemoteControlInvokeRequest) -> Result<(), DomainEr
         ));
     }
     Ok(())
+}
+
+fn is_forwardable_resource_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "if-none-match" | "if-modified-since" | "if-range" | "range"
+    )
 }
 
 fn validate_result_identity(result: &RemoteControlInvokeResult) -> Result<(), DomainError> {
@@ -275,7 +438,18 @@ fn result_size(result: &RemoteControlInvokeResult) -> Result<usize, DomainError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use tokio::sync::mpsc;
+    use tt_contracts::byte_commit::CommitBegin;
+    use tt_contracts::remote_control::RemoteControlChatPayloadRequest;
+    use tt_ports::byte_reader::ByteReader;
+    use tt_ports::host_resource::{
+        HostResourceAssetStore, HostResourceSourceRequest, HostResourceStoreError,
+        OpenedHostResource,
+    };
+    use tt_ports::repositories::chat_commit_repository::{
+        ChatCommitOperation, ChatCommitRepository, ChatCommitTarget, ChatSwipeSource,
+    };
 
     struct RecordingPublisher {
         commands: mpsc::UnboundedSender<RemoteControlDesktopCommand>,
@@ -289,15 +463,104 @@ mod tests {
         }
     }
 
+    struct TestChatCommitRepository;
+
+    #[async_trait::async_trait]
+    impl ChatCommitRepository for TestChatCommitRepository {
+        async fn open_payload_json(
+            &self,
+            _target: ChatCommitTarget,
+        ) -> Result<Box<dyn ByteReader>, DomainError> {
+            Ok(Box::new(TestByteReader {
+                bytes: br#"[{"file_name":"remote-chat"}]"#.to_vec(),
+                offset: 0,
+            }))
+        }
+
+        async fn open_swipe_source(
+            &self,
+            _target: ChatCommitTarget,
+        ) -> Result<Arc<dyn ChatSwipeSource>, DomainError> {
+            Err(DomainError::Conflict("Not used in this test".to_string()))
+        }
+
+        async fn begin(
+            &self,
+            _target: ChatCommitTarget,
+            _operation: ChatCommitOperation,
+        ) -> Result<CommitBegin, DomainError> {
+            Err(DomainError::Conflict("Not used in this test".to_string()))
+        }
+
+        async fn append(
+            &self,
+            _session_id: &str,
+            _offset: u64,
+            _bytes: &[u8],
+        ) -> Result<u64, DomainError> {
+            Err(DomainError::Conflict("Not used in this test".to_string()))
+        }
+
+        async fn finish(
+            &self,
+            _session_id: &str,
+            _expected_size: u64,
+        ) -> Result<ChatCommitTarget, DomainError> {
+            Err(DomainError::Conflict("Not used in this test".to_string()))
+        }
+
+        async fn abort(&self, _session_id: &str) -> Result<(), DomainError> {
+            Err(DomainError::Conflict("Not used in this test".to_string()))
+        }
+    }
+
+    struct TestByteReader {
+        bytes: Vec<u8>,
+        offset: usize,
+    }
+
+    #[async_trait::async_trait]
+    impl ByteReader for TestByteReader {
+        async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, DomainError> {
+            let bytes_read = buffer
+                .len()
+                .min(self.bytes.len().saturating_sub(self.offset));
+            buffer[..bytes_read]
+                .copy_from_slice(&self.bytes[self.offset..self.offset + bytes_read]);
+            self.offset += bytes_read;
+            Ok(bytes_read)
+        }
+    }
+
+    struct TestHostResourceStore;
+
+    impl HostResourceAssetStore for TestHostResourceStore {
+        fn open(
+            &self,
+            _request: HostResourceSourceRequest<'_>,
+        ) -> Result<OpenedHostResource, HostResourceStoreError> {
+            Err(HostResourceStoreError::not_found("Test asset not found"))
+        }
+    }
+
+    fn create_service(publisher: Arc<dyn RemoteControlCommandPublisher>) -> RemoteControlService {
+        RemoteControlService::new(
+            publisher,
+            super::super::settings_service::tests::remote_control_test_settings_service(),
+            Arc::new(TestChatCommitRepository),
+            Arc::new(HostResourceService::new(
+                false,
+                Arc::new(TestHostResourceStore),
+            )),
+        )
+    }
+
     #[tokio::test]
     async fn invoke_waits_for_the_matching_desktop_response() {
         let (command_sender, mut command_receiver) = mpsc::unbounded_channel();
-        let service = Arc::new(RemoteControlService::new(
-            Arc::new(RecordingPublisher {
-                commands: command_sender,
-            }),
-            super::super::settings_service::tests::remote_control_test_settings_service(),
-        ));
+        let service = Arc::new(create_service(Arc::new(RecordingPublisher {
+            commands: command_sender,
+        })));
         let status = service.start_session().await.expect("start session");
         let session_id = status.session_id.expect("active session id");
 
@@ -346,12 +609,9 @@ mod tests {
     #[tokio::test]
     async fn settings_bytes_are_available_only_during_the_remote_control_session() {
         let (command_sender, _command_receiver) = mpsc::unbounded_channel();
-        let service = RemoteControlService::new(
-            Arc::new(RecordingPublisher {
-                commands: command_sender,
-            }),
-            super::super::settings_service::tests::remote_control_test_settings_service(),
-        );
+        let service = create_service(Arc::new(RecordingPublisher {
+            commands: command_sender,
+        }));
         let status = service.start_session().await.expect("start session");
         let session_id = status.session_id.expect("active session id");
 
@@ -368,14 +628,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn chat_payload_is_read_from_the_desktop_only_during_the_remote_session() {
+        let (command_sender, _command_receiver) = mpsc::unbounded_channel();
+        let service = create_service(Arc::new(RecordingPublisher {
+            commands: command_sender,
+        }));
+        let status = service.start_session().await.expect("start session");
+        let session_id = status.session_id.expect("active session id");
+
+        let payload = service
+            .get_chat_payload(RemoteControlChatPayloadRequest {
+                session_id: session_id.clone(),
+                target: RemoteControlChatTarget::Character {
+                    character_id: "character".to_string(),
+                    file_name: "remote-chat".to_string(),
+                },
+                allow_not_found: false,
+            })
+            .await
+            .expect("read desktop chat payload");
+        assert_eq!(payload, br#"[{"file_name":"remote-chat"}]"#);
+
+        service.stop_session().await.expect("stop session");
+        assert!(
+            service
+                .get_chat_payload(RemoteControlChatPayloadRequest {
+                    session_id,
+                    target: RemoteControlChatTarget::Character {
+                        character_id: "character".to_string(),
+                        file_name: "remote-chat".to_string(),
+                    },
+                    allow_not_found: false,
+                })
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn remote_extension_resources_reject_paths_outside_the_extension_store() {
+        let (command_sender, _command_receiver) = mpsc::unbounded_channel();
+        let service = create_service(Arc::new(RecordingPublisher {
+            commands: command_sender,
+        }));
+        let status = service.start_session().await.expect("start session");
+        let session_id = status.session_id.expect("active session id");
+
+        let error = service
+            .get_extension_resource(RemoteControlResourceRequest {
+                session_id,
+                method: "GET".to_string(),
+                path: "/backgrounds/private.png".to_string(),
+                headers: BTreeMap::new(),
+            })
+            .await
+            .expect_err("Remote Control must not expose arbitrary host resources");
+        assert!(error.to_string().contains("third-party extension assets"));
+    }
+
+    #[tokio::test]
     async fn oversized_response_fails_the_waiting_invoke_instead_of_leaking_it_until_timeout() {
         let (command_sender, mut command_receiver) = mpsc::unbounded_channel();
-        let service = Arc::new(RemoteControlService::new(
-            Arc::new(RecordingPublisher {
-                commands: command_sender,
-            }),
-            super::super::settings_service::tests::remote_control_test_settings_service(),
-        ));
+        let service = Arc::new(create_service(Arc::new(RecordingPublisher {
+            commands: command_sender,
+        })));
         let status = service.start_session().await.expect("start session");
         let session_id = status.session_id.expect("active session id");
 

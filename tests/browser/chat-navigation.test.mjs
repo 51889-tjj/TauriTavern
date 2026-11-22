@@ -87,6 +87,14 @@ test('chat persistence and navigation', async (context) => {
                     : new window.TextEncoder().encode(`[${payload.split('\n').filter(Boolean).join(',')}]`));
                 return rid;
             }
+            case 'remote_control_client_get_chat_payload': {
+                const fileName = args.target.fileName ?? args.target.chatId;
+                const payload = payloads.get(fileName);
+                if (payload instanceof Error) throw payload;
+                return new window.Uint8Array(
+                    new window.TextEncoder().encode(`[${payload.split('\n').filter(Boolean).join(',')}]`),
+                );
+            }
             case 'read_bytes': {
                 const content = handles.get(args.rid);
                 if (content instanceof Error) throw content;
@@ -213,6 +221,28 @@ test('chat persistence and navigation', async (context) => {
             await assert.rejects(ajax({ url: '/getchat', type: 'POST', contentType: 'application/json', data }), /Invalid JSONL at line 2/);
             payloads.delete('broken');
             assert.equal(handles.size, 0);
+
+            const previousRemoteControl = window.__TAURITAVERN_REMOTE_CONTROL__;
+            window.__TAURITAVERN_REMOTE_CONTROL__ = {
+                deviceId: 'desktop-1',
+                sessionId: 'control-session',
+            };
+            try {
+                const remoteResponse = await window.fetch('/getchat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ avatar_url: 'Review.png', file_name: 'legacy-chat' }),
+                });
+                assert.equal(remoteResponse.status, 200);
+                const remotePayload = await remoteResponse.json();
+                assert.equal(remotePayload[1].mes, 'legacy-chat');
+            } finally {
+                if (previousRemoteControl === undefined) {
+                    delete window.__TAURITAVERN_REMOTE_CONTROL__;
+                } else {
+                    window.__TAURITAVERN_REMOTE_CONTROL__ = previousRemoteControl;
+                }
+            }
         });
         const main = await initializeChatRendering();
         const groupChats = getModule('scripts/group-chats.js').namespace;

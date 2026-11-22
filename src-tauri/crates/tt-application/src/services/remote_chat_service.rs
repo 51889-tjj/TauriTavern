@@ -14,7 +14,6 @@ use tt_domain::errors::DomainError;
 use tt_ports::remote_chat::{RemoteChatApi, RemoteChatCommandPublisher, RemoteChatEventSink};
 
 use crate::dto::character_dto::GetCharacterChatsDto;
-use crate::errors::ApplicationError;
 use crate::services::character_service::CharacterService;
 use crate::services::chat_service::ChatService;
 use crate::services::group_chat_service::GroupChatService;
@@ -187,7 +186,7 @@ impl RemoteChatService {
                 simple: true,
             })
             .await
-            .map_err(map_application_error)?;
+            .map_err(DomainError::from)?;
 
         Ok(chats
             .into_iter()
@@ -221,7 +220,7 @@ impl RemoteChatService {
             .group_chats
             .list_group_chat_summaries(Some(&chat_ids), false)
             .await
-            .map_err(map_application_error)?;
+            .map_err(DomainError::from)?;
 
         Ok(results
             .into_iter()
@@ -254,7 +253,7 @@ impl RemoteChatService {
                 REMOTE_CHAT_MAX_HISTORY_MESSAGES,
             )
             .await
-            .map_err(map_application_error)?;
+            .map_err(DomainError::from)?;
         let target = RemoteChatTarget::Character {
             character_name,
             file_name: file_name.clone(),
@@ -296,7 +295,7 @@ impl RemoteChatService {
             .group_chats
             .get_group_chat_payload_tail_lines(&chat_id, REMOTE_CHAT_MAX_HISTORY_MESSAGES)
             .await
-            .map_err(map_application_error)?;
+            .map_err(DomainError::from)?;
         let messages = tail
             .lines
             .into_iter()
@@ -356,7 +355,7 @@ impl RemoteChatApi for RemoteChatService {
             .characters
             .get_all_characters(true)
             .await
-            .map_err(map_application_error)?
+            .map_err(DomainError::from)?
             .into_iter()
             .map(|character| RemoteChatCharacter {
                 character_name: character.name.clone(),
@@ -648,7 +647,7 @@ async fn ensure_target_is_listed(
             chats
                 .get_chat_payload_tail_lines(character_name, file_name, 1)
                 .await
-                .map_err(map_application_error)?;
+                .map_err(DomainError::from)?;
             Ok(())
         }
         RemoteChatTarget::Group { group_id, chat_id } => {
@@ -664,24 +663,8 @@ async fn ensure_target_is_listed(
             group_chats
                 .get_group_chat_summary(chat_id, false)
                 .await
-                .map_err(map_application_error)?;
+                .map_err(DomainError::from)?;
             Ok(())
-        }
-    }
-}
-
-fn map_application_error(error: ApplicationError) -> DomainError {
-    match error {
-        ApplicationError::RateLimited(message) => DomainError::RateLimited { message },
-        ApplicationError::Transient(message) => DomainError::Transient(message),
-        ApplicationError::UpstreamFailure(failure) => DomainError::UpstreamFailure(failure),
-        ApplicationError::Cancelled(message) => DomainError::Cancelled(message),
-        ApplicationError::InternalError(message) => DomainError::InternalError(message),
-        ApplicationError::ValidationError(message) => DomainError::InvalidData(message),
-        ApplicationError::Conflict(message) => DomainError::Conflict(message),
-        ApplicationError::NotFound(message) => DomainError::NotFound(message),
-        ApplicationError::Unauthorized(message) | ApplicationError::PermissionDenied(message) => {
-            DomainError::AuthenticationError(message)
         }
     }
 }

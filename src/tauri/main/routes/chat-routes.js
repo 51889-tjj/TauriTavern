@@ -20,9 +20,15 @@ export function registerChatRoutes(router, context, { jsonResponse }) {
 
     async function openChatResponse(target, allowNotFound) {
         const rid = await context.invokeTransport('open_chat_payload_json', { target, allowNotFound });
-        return rid === null
-            ? jsonResponse([])
-            : new Response(createByteStream(rid), { headers: { 'Content-Type': 'application/json' } });
+        if (rid === null) {
+            return jsonResponse([]);
+        }
+
+        if (rid instanceof Uint8Array || rid instanceof ArrayBuffer) {
+            return new Response(rid, { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        return new Response(createByteStream(rid), { headers: { 'Content-Type': 'application/json' } });
     }
 
     router.post('/api/chats/get', async ({ body }) => {

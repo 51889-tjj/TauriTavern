@@ -52,16 +52,7 @@ impl ChatCommitService {
         locator: ChatHistoryLocator,
         allow_not_found: bool,
     ) -> Result<Option<Box<dyn ByteReader>>, ApplicationError> {
-        validate_chat_history_locator(&locator)?;
-        match self
-            .repository
-            .open_payload_json(target_from_locator(locator))
-            .await
-        {
-            Ok(reader) => Ok(Some(reader)),
-            Err(tt_domain::errors::DomainError::NotFound(_)) if allow_not_found => Ok(None),
-            Err(error) => Err(error.into()),
-        }
+        open_chat_payload_json(self.repository.as_ref(), locator, allow_not_found).await
     }
 
     pub async fn open_swipe_source(
@@ -105,6 +96,22 @@ impl ChatCommitService {
 
     pub async fn abort(&self, session_id: &str) -> Result<(), ApplicationError> {
         Ok(self.repository.abort(session_id).await?)
+    }
+}
+
+pub(crate) async fn open_chat_payload_json(
+    repository: &dyn ChatCommitRepository,
+    locator: ChatHistoryLocator,
+    allow_not_found: bool,
+) -> Result<Option<Box<dyn ByteReader>>, ApplicationError> {
+    validate_chat_history_locator(&locator)?;
+    match repository
+        .open_payload_json(target_from_locator(locator))
+        .await
+    {
+        Ok(reader) => Ok(Some(reader)),
+        Err(tt_domain::errors::DomainError::NotFound(_)) if allow_not_found => Ok(None),
+        Err(error) => Err(error.into()),
     }
 }
 

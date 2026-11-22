@@ -1,4 +1,5 @@
 import { createAbortError, isAbortError } from './kernel/abort-error.js';
+import { toRemoteThirdPartyResourceUrl } from '../remote-control/resource-paths.js';
 
 export function createInterceptors({
     originalFetch,
@@ -94,6 +95,24 @@ export function createInterceptors({
         return window.location.origin;
     }
 
+    function remoteThirdPartyResourceUrl(requestUrl, targetWindow) {
+        const remote = window.__TAURITAVERN_REMOTE_CONTROL__;
+        if (!remote) {
+            return null;
+        }
+
+        try {
+            const base = new URL(resolveWindowBaseUrl(targetWindow));
+            const url = new URL(requestUrl, base);
+            if (url.protocol !== base.protocol || url.host !== base.host) {
+                return null;
+            }
+            return toRemoteThirdPartyResourceUrl(`${url.pathname}${url.search}`, remote);
+        } catch {
+            return null;
+        }
+    }
+
     function getFetchDelegate(targetWindow) {
         const state = fetchPatchState.get(targetWindow);
         let currentFetch;
@@ -147,6 +166,19 @@ export function createInterceptors({
             }
 
             const requestUrl = toUrl(input, resolveWindowBaseUrl(targetWindow));
+            const remoteResourceUrl = requestUrl
+                ? remoteThirdPartyResourceUrl(requestUrl, targetWindow)
+                : null;
+            if (remoteResourceUrl) {
+                const isRequestInput = input
+                    && typeof input === 'object'
+                    && typeof input.url === 'string'
+                    && typeof input.method === 'string';
+                const remoteInput = typeof Request === 'function' && isRequestInput
+                    ? new Request(remoteResourceUrl, input)
+                    : remoteResourceUrl;
+                return delegateFetch(remoteInput, init);
+            }
             if (!requestUrl || !canHandleRequest(requestUrl, input, init, targetWindow)) {
                 return delegateFetch(input, init);
             }
@@ -190,6 +222,12 @@ export function createInterceptors({
                 : { ...(urlOrOptions || {}) };
 
             const requestUrl = toUrl(options.url, resolveWindowBaseUrl(targetWindow));
+            const remoteResourceUrl = requestUrl
+                ? remoteThirdPartyResourceUrl(requestUrl, targetWindow)
+                : null;
+            if (remoteResourceUrl) {
+                return originalAjax({ ...options, url: remoteResourceUrl });
+            }
             if (!requestUrl || !canHandleRequest(requestUrl, options.url, {
                 method: options.type || options.method || 'GET',
             }, targetWindow)) {

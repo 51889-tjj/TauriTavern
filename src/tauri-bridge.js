@@ -62,6 +62,14 @@ export const invoke = (...args) => {
                 sessionId: remote.sessionId,
             });
         }
+        if (command === 'open_chat_payload_json') {
+            return fn('remote_control_client_get_chat_payload', {
+                deviceId: remote.deviceId,
+                sessionId: remote.sessionId,
+                target: normalizedArgs?.target,
+                allowNotFound: Boolean(normalizedArgs?.allowNotFound),
+            });
+        }
         const operation = toRemoteControlOperation(command, normalizedArgs, options);
         return fn('remote_control_client_invoke', {
             deviceId: remote.deviceId,

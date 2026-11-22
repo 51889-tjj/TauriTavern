@@ -58,6 +58,58 @@ test('fetch interceptor rejects immediately when AbortSignal is already aborted'
     dom.cleanup();
 });
 
+test('remote third-party asset fetches use the paired native resource origin', async () => {
+    const { createInterceptors } = await importFresh(
+        path.join(REPO_ROOT, 'src/tauri/main/interceptors.js'),
+    );
+    const previousWindow = globalThis.window;
+    const remoteWindow = {
+        location: {
+            href: 'tauri://localhost/',
+            origin: 'tauri://localhost',
+        },
+        __TAURITAVERN_REMOTE_CONTROL__: {
+            deviceId: 'desktop-1',
+            sessionId: 'control-session',
+        },
+    };
+
+    let delegatedUrl;
+    let routedCalls = 0;
+    remoteWindow.fetch = async input => {
+        delegatedUrl = String(input?.url ?? input);
+        return new Response('remote asset');
+    };
+    globalThis.window = remoteWindow;
+
+    try {
+        const interceptors = createInterceptors({
+            originalFetch: remoteWindow.fetch.bind(remoteWindow),
+            canHandleRequest: () => {
+                routedCalls += 1;
+                return true;
+            },
+            toUrl: (input, base) => new URL(String(input), base),
+            routeRequest: async () => new Response('unexpected local response'),
+        });
+        interceptors.patchFetch(remoteWindow);
+
+        const response = await remoteWindow.fetch(
+            '/scripts/extensions/third-party/example-extension/manifest.json',
+        );
+        assert.equal(response.status, 200);
+        assert.equal(await response.text(), 'remote asset');
+        assert.equal(
+            delegatedUrl,
+            'tt-remote://control-session.localhost/scripts/extensions/third-party/example-extension/manifest.json',
+        );
+        assert.equal(routedCalls, 0);
+    } finally {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+    }
+});
+
 test('fetch interceptor rejects when AbortSignal is aborted while routed request is pending', async () => {
     const { createInterceptors } = await importFresh(
         path.join(REPO_ROOT, 'src/tauri/main/interceptors.js'),

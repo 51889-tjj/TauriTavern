@@ -286,6 +286,20 @@ impl RemoteControlApi for DisabledRemoteControlApi {
         Err(shell_remote_control_unavailable())
     }
 
+    async fn get_chat_payload(
+        &self,
+        _request: tt_contracts::remote_control::RemoteControlChatPayloadRequest,
+    ) -> Result<Vec<u8>, DomainError> {
+        Err(shell_remote_control_unavailable())
+    }
+
+    async fn get_extension_resource(
+        &self,
+        _request: tt_contracts::remote_control::RemoteControlResourceRequest,
+    ) -> Result<tt_contracts::remote_control::RemoteControlResourceResponse, DomainError> {
+        Err(shell_remote_control_unavailable())
+    }
+
     async fn invoke(
         &self,
         _request: RemoteControlInvokeRequest,

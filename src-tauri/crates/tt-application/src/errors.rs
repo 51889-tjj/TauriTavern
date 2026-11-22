@@ -75,3 +75,22 @@ impl From<DomainError> for ApplicationError {
         }
     }
 }
+
+impl From<ApplicationError> for DomainError {
+    fn from(error: ApplicationError) -> Self {
+        match error {
+            ApplicationError::RateLimited(message) => DomainError::RateLimited { message },
+            ApplicationError::Transient(message) => DomainError::Transient(message),
+            ApplicationError::UpstreamFailure(failure) => DomainError::UpstreamFailure(failure),
+            ApplicationError::Cancelled(message) => DomainError::Cancelled(message),
+            ApplicationError::InternalError(message) => DomainError::InternalError(message),
+            ApplicationError::ValidationError(message) => DomainError::InvalidData(message),
+            ApplicationError::Conflict(message) => DomainError::Conflict(message),
+            ApplicationError::NotFound(message) => DomainError::NotFound(message),
+            ApplicationError::Unauthorized(message)
+            | ApplicationError::PermissionDenied(message) => {
+                DomainError::AuthenticationError(message)
+            }
+        }
+    }
+}

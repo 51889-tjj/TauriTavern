@@ -30,6 +30,7 @@ use tt_application::services::extension_store_service::ExtensionStoreService;
 use tt_application::services::external_import_service::ExternalImportDownloader;
 use tt_application::services::group_chat_service::GroupChatService;
 use tt_application::services::group_service::GroupService;
+use tt_application::services::host_resource_service::HostResourceService;
 use tt_application::services::image_metadata_service::ImageMetadataService;
 use tt_application::services::llm_connection_service::LlmConnectionService;
 use tt_application::services::mcp_service::McpService;
@@ -264,9 +265,15 @@ pub(super) async fn build(
         group_chat_service.clone(),
         adapters::remote_chat_command_publisher(app_handle),
     ));
+    let host_resource_service = app_handle
+        .state::<Arc<HostResourceService>>()
+        .inner()
+        .clone();
     let remote_control_service = Arc::new(RemoteControlService::new(
         adapters::remote_control_command_publisher(app_handle),
         settings_service.clone(),
+        repositories.chat_commit_repository.clone(),
+        host_resource_service,
     ));
     let sync_services = sync::build(
         app_handle,
