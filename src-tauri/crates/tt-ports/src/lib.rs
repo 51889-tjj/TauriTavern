@@ -10,6 +10,7 @@ pub mod lan_discovery;
 pub mod lan_sync;
 pub mod mcp;
 pub mod remote_chat;
+pub mod remote_control;
 pub mod repositories;
 pub mod runtime_paths;
 pub mod settings;

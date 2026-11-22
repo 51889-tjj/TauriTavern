@@ -5,15 +5,15 @@
   "identifier": "com.tauritavern.remotechat",
   "build": {
     "beforeBuildCommand": {
-      "script": "node scripts/remote-chat-shell.mjs web:build",
+      "script": "npm run web:build",
       "cwd": "../../.."
     },
     "beforeDevCommand": {
-      "script": "node scripts/remote-chat-shell.mjs web:dev",
+      "script": "node scripts/tauri-dev-server.mjs",
       "cwd": "../../.."
     },
-    "devUrl": "http://127.0.0.1:1431",
-    "frontendDist": "../../../remote-chat-shell/public"
+    "devUrl": "http://localhost:1430",
+    "frontendDist": "../../../src"
   },
   "app": {
     "withGlobalTauri": true,

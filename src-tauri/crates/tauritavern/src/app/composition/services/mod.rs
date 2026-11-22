@@ -37,6 +37,7 @@ use tt_application::services::preset_service::PresetService;
 use tt_application::services::provider_metadata_service::ProviderMetadataService;
 use tt_application::services::quick_reply_service::QuickReplyService;
 use tt_application::services::remote_chat_service::RemoteChatService;
+use tt_application::services::remote_control_service::RemoteControlService;
 use tt_application::services::searxng_search_service::SearxngSearchService;
 use tt_application::services::secret_service::SecretService;
 use tt_application::services::settings_service::{RequestProxyRuntime, SettingsService};
@@ -263,6 +264,9 @@ pub(super) async fn build(
         group_chat_service.clone(),
         adapters::remote_chat_command_publisher(app_handle),
     ));
+    let remote_control_service = Arc::new(RemoteControlService::new(
+        adapters::remote_control_command_publisher(app_handle),
+    ));
     let sync_services = sync::build(
         app_handle,
         data_directory,
@@ -271,6 +275,7 @@ pub(super) async fn build(
         local_mutation_gate,
         database_service.clone(),
         remote_chat_service.clone(),
+        remote_control_service.clone(),
     );
 
     Ok(AppServices {
@@ -316,6 +321,7 @@ pub(super) async fn build(
         tts_service,
         world_info_service,
         remote_chat_service,
+        remote_control_service,
         remote_chat_client_service: sync_services.remote_chat_client_service,
         lan_sync_service: sync_services.lan_sync_service,
         tt_sync_service: sync_services.tt_sync_service,

@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { RemoteChatApp } from './RemoteChatApp';
-import { requireRemoteChatApi, tr, waitForHostReady } from './host';
+import { requireRemoteChatApi, requireRemoteControlApi, tr, waitForHostReady } from './host';
 
 const MENU_ITEM_ID = 'tauritavern_remote_chat_menu_item';
 const DIALOG_ID = 'tauritavern_remote_chat_dialog';
@@ -10,6 +10,7 @@ let closePanel: (() => void) | null = null;
 
 await waitForHostReady();
 const api = requireRemoteChatApi();
+const remoteControlApi = requireRemoteControlApi();
 
 function removePanel(): void {
     closePanel?.();
@@ -43,7 +44,12 @@ function openPanel(): void {
     dialog.showModal();
     root.render(
         <StrictMode>
-            <RemoteChatApp api={api} tr={tr} onClose={close} />
+            <RemoteChatApp
+                api={api}
+                remoteControlApi={remoteControlApi}
+                tr={tr}
+                onClose={close}
+            />
         </StrictMode>,
     );
 }

@@ -1,7 +1,7 @@
 [package]
 name = "tt-remote-chat-shell"
 version = "0.1.0"
-description = "Lightweight iOS Remote Chat client for TauriTavern"
+description = "Independent iOS Remote Control client for TauriTavern"
 authors = ["TauriTavern Team"]
 edition = "2024"
 

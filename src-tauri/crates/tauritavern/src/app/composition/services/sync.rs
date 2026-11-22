@@ -14,12 +14,14 @@ use tt_application::services::lan_sync_service::{
 };
 use tt_application::services::remote_chat_client_service::RemoteChatClientService;
 use tt_application::services::remote_chat_service::RemoteChatService;
+use tt_application::services::remote_control_service::RemoteControlService;
 use tt_application::services::sync_automation_service::SyncAutomationService;
 use tt_application::services::sync_job_coordinator::SyncJobCoordinator;
 use tt_application::services::tt_sync_service::TtSyncService;
 use tt_domain::ios_policy::IosPolicyActivationReport;
 use tt_ports::lan_sync::{LanPeerRepository, LanServerControl, LanSyncSettingsRepository};
 use tt_ports::remote_chat::RemoteChatApi;
+use tt_ports::remote_control::RemoteControlApi;
 use tt_ports::sync::DataChangeReconciler;
 
 use super::super::adapters;
@@ -39,6 +41,7 @@ pub(super) fn build(
     local_mutation_gate: Arc<Semaphore>,
     database: Arc<dyn tt_ports::database::DatabaseFileAccess>,
     remote_chat_service: Arc<RemoteChatService>,
+    remote_control_service: Arc<RemoteControlService>,
 ) -> SyncServices {
     let product_user_agent = crate::product::USER_AGENT;
     let lan_runtime_state = Arc::new(LanSyncRuntimeState::new());
@@ -82,6 +85,7 @@ pub(super) fn build(
         pairing_approval.clone(),
     ));
     let remote_chat_api: Arc<dyn RemoteChatApi> = remote_chat_service;
+    let remote_control_api: Arc<dyn RemoteControlApi> = remote_control_service;
     let lan_server_control: Arc<dyn LanServerControl> = Arc::new(AxumLanServerControl::new(
         data_directory.root().to_path_buf(),
         lan_peer_store.clone(),
@@ -90,6 +94,7 @@ pub(super) fn build(
         lan_discovery.clone(),
         database,
         remote_chat_api,
+        remote_control_api,
     ));
     let lan_sync_service = Arc::new(LanSyncService::new(
         lan_runtime_state,

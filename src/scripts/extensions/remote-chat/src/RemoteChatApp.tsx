@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { RemoteChatConversation } from './RemoteChatConversation';
+import { RemoteControlHostPanel } from './RemoteControlHostPanel';
 
 type RemoteChatApi = TauriTavernRemoteChatApi;
 type RemoteChatTarget = TauriTavernRemoteChatTarget;
@@ -13,6 +14,7 @@ type Translator = (key: import('./host').RemoteChatMessageKey) => string;
 
 type Props = {
     api: RemoteChatApi;
+    remoteControlApi?: TauriTavernRemoteControlApi;
     tr: Translator;
     onClose: () => void;
 };
@@ -34,7 +36,7 @@ function mapHistoryMessages(
     }));
 }
 
-export function RemoteChatApp({ api, tr, onClose }: Props) {
+export function RemoteChatApp({ api, remoteControlApi, tr, onClose }: Props) {
     const [mode, setMode] = useState<Mode>(api.host.available ? 'host' : 'client');
     const [hostStatus, setHostStatus] = useState<TauriTavernRemoteChatSessionStatus | null>(null);
     const [devices, setDevices] = useState<PairedDevice[]>([]);
@@ -379,15 +381,20 @@ export function RemoteChatApp({ api, tr, onClose }: Props) {
             {error && <p className="tt-remote-chat__error" role="alert">{error}</p>}
 
             {mode === 'host' && api.host.available && (
-                <div className="tt-remote-chat__host">
-                    <p>{tr('hostDescription')}</p>
-                    <p className={hostStatus?.active ? 'tt-remote-chat__status is-active' : 'tt-remote-chat__status'}>
-                        {hostStatus?.active ? tr('hostActive') : tr('hostInactive')}
-                    </p>
-                    {hostStatus?.active
-                        ? <button type="button" disabled={busy} onClick={() => void stopHost()}>{tr('stopHost')}</button>
-                        : <button type="button" disabled={busy} onClick={() => void startHost()}>{tr('startHost')}</button>}
-                </div>
+                <>
+                    <div className="tt-remote-chat__host">
+                        <p>{tr('hostDescription')}</p>
+                        <p className={hostStatus?.active ? 'tt-remote-chat__status is-active' : 'tt-remote-chat__status'}>
+                            {hostStatus?.active ? tr('hostActive') : tr('hostInactive')}
+                        </p>
+                        {hostStatus?.active
+                            ? <button type="button" disabled={busy} onClick={() => void stopHost()}>{tr('stopHost')}</button>
+                            : <button type="button" disabled={busy} onClick={() => void startHost()}>{tr('startHost')}</button>}
+                    </div>
+                    {remoteControlApi?.host.available && (
+                        <RemoteControlHostPanel api={remoteControlApi} tr={tr} />
+                    )}
+                </>
             )}
 
             {mode === 'client' && view === 'devices' && (

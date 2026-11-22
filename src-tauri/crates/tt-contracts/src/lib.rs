@@ -13,6 +13,7 @@ pub mod observability;
 pub mod provider_metadata;
 pub mod range;
 pub mod remote_chat;
+pub mod remote_control;
 pub mod settings;
 pub mod sync;
 pub mod sync_automation;

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "default",
-  "description": "Remote Chat shell window and QR pairing scanner",
+  "description": "Remote Control shell window and QR pairing scanner",
   "windows": [
     "main"
   ],

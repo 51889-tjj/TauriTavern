@@ -34,6 +34,7 @@ use tt_application::services::provider_metadata_service::ProviderMetadataService
 use tt_application::services::quick_reply_service::QuickReplyService;
 use tt_application::services::remote_chat_client_service::RemoteChatClientService;
 use tt_application::services::remote_chat_service::RemoteChatService;
+use tt_application::services::remote_control_service::RemoteControlService;
 use tt_application::services::searxng_search_service::SearxngSearchService;
 use tt_application::services::secret_service::SecretService;
 use tt_application::services::settings_service::SettingsService;
@@ -121,6 +122,7 @@ pub(crate) struct AppServices {
     pub(crate) tts_service: Arc<TtsService>,
     pub(crate) world_info_service: Arc<WorldInfoService>,
     pub(crate) remote_chat_service: Arc<RemoteChatService>,
+    pub(crate) remote_control_service: Arc<RemoteControlService>,
     pub(crate) remote_chat_client_service: Arc<RemoteChatClientService>,
     pub(crate) lan_sync_service: Arc<LanSyncService>,
     pub(crate) tt_sync_service: Arc<TtSyncService>,

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-#[cfg(test)]
 use reqwest::Response;
+use serde::de::DeserializeOwned;
 use ttsync_contract::peer::DeviceId;
 use ttsync_contract::session::{SessionOpenResponse, SessionToken};
 use ttsync_contract::status::StatusResponse;
@@ -25,6 +25,9 @@ use tt_contracts::remote_chat::{
     RemoteChatSessionStatus, RemoteChatStopRequest, RemoteChatSubmit, RemoteChatSubmitRequest,
     RemoteChatSubmitResponse, RemoteChatSummary, RemoteChatTarget,
 };
+use tt_contracts::remote_control::{
+    RemoteControlInvokeRequest, RemoteControlSessionStatus, RemoteControlValue,
+};
 use tt_contracts::sync::SyncOperationOptions;
 use tt_domain::errors::DomainError;
 use tt_domain::models::lan_sync::{
@@ -32,6 +35,8 @@ use tt_domain::models::lan_sync::{
 };
 use tt_ports::lan_discovery::LanDeviceDiscovery;
 use tt_ports::lan_sync::LanPairingClient;
+
+const REMOTE_CONTROL_MAX_RESPONSE_WIRE_BYTES: usize = 20 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct LanSyncClient {
@@ -190,6 +195,49 @@ impl LanSyncClient {
             .json()
             .await
             .map_err(|error| DomainError::InvalidData(error.to_string()))
+    }
+
+    pub async fn remote_control_status(
+        &self,
+        session_token: &SessionToken,
+    ) -> Result<RemoteControlSessionStatus, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .get(self.inner.endpoint_url("/v2/remote-control/status")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        ensure_success(response, "Cannot read Remote Control status")
+            .await?
+            .json()
+            .await
+            .map_err(|error| DomainError::InvalidData(error.to_string()))
+    }
+
+    pub async fn remote_control_invoke(
+        &self,
+        session_token: &SessionToken,
+        request: RemoteControlInvokeRequest,
+    ) -> Result<RemoteControlValue, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(self.inner.endpoint_url("/v2/remote-control/invoke")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(&request)
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        let response = ensure_success(response, "Remote Control invocation failed").await?;
+        read_remote_control_json(response).await
     }
 
     pub async fn remote_chat_catalog(
@@ -358,6 +406,35 @@ impl LanSyncClient {
             .map_err(|error| DomainError::Transient(error.to_string()))?;
         Ok(())
     }
+}
+
+async fn read_remote_control_json<T: DeserializeOwned>(
+    mut response: Response,
+) -> Result<T, DomainError> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > REMOTE_CONTROL_MAX_RESPONSE_WIRE_BYTES as u64)
+    {
+        return Err(DomainError::InvalidData(
+            "Remote Control response exceeds the allowed size".to_string(),
+        ));
+    }
+
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| DomainError::Transient(error.to_string()))?
+    {
+        if body.len().saturating_add(chunk.len()) > REMOTE_CONTROL_MAX_RESPONSE_WIRE_BYTES {
+            return Err(DomainError::InvalidData(
+                "Remote Control response exceeds the allowed size".to_string(),
+            ));
+        }
+        body.extend_from_slice(&chunk);
+    }
+
+    serde_json::from_slice(&body).map_err(|error| DomainError::InvalidData(error.to_string()))
 }
 
 pub struct HttpLanPairingClient {

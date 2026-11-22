@@ -26,6 +26,7 @@ use tt_contracts::remote_chat::{
     RemoteChatChatsRequest, RemoteChatEventsRequest, RemoteChatHistoryRequest,
     RemoteChatSessionRequest, RemoteChatStopRequest, RemoteChatSubmitRequest,
 };
+use tt_contracts::remote_control::RemoteControlInvokeRequest;
 use tt_contracts::sync::PAIRING_REJECTED_MESSAGE;
 use tt_contracts::sync::SyncOperationOptions;
 use tt_domain::errors::DomainError;
@@ -33,6 +34,7 @@ use tt_domain::models::lan_sync::{LanPairCompleteRequest, LanPairCompleteRespons
 use tt_ports::database::DatabaseFileAccess;
 use tt_ports::lan_sync::{LanInboundRequestHandler, LanServerEvents, LanServerInfo};
 use tt_ports::remote_chat::RemoteChatApi;
+use tt_ports::remote_control::RemoteControlApi;
 
 const LAN_HTTPS_FEATURE_V1: &str = "lan_https_v1";
 const LAN_SESSION_FEATURE_V1: &str = "lan_session_v1";
@@ -70,6 +72,7 @@ pub async fn spawn_lan_sync_server(
     events: Arc<dyn LanServerEvents>,
     database: Arc<dyn DatabaseFileAccess>,
     remote_chat: Arc<dyn RemoteChatApi>,
+    remote_control: Arc<dyn RemoteControlApi>,
 ) -> Result<LanSyncServerHandle, DomainError> {
     install_rustls_crypto_provider();
     let identity = store.load_or_create_identity().await?;
@@ -110,6 +113,7 @@ pub async fn spawn_lan_sync_server(
         events: events.clone(),
         shared: shared_state.clone(),
         remote_chat,
+        remote_control,
     });
 
     let remote_chat_router = Router::new()
@@ -121,12 +125,23 @@ pub async fn spawn_lan_sync_server(
         .route("/v2/remote-chat/events", post(handle_remote_chat_events))
         .route("/v2/remote-chat/stop", post(handle_remote_chat_stop))
         .layer(DefaultBodyLimit::max(96 * 1024));
+    let remote_control_router = Router::new()
+        .route(
+            "/v2/remote-control/status",
+            get(handle_remote_control_status),
+        )
+        .route(
+            "/v2/remote-control/invoke",
+            post(handle_remote_control_invoke),
+        )
+        .layer(DefaultBodyLimit::max(320 * 1024));
 
     let app = Router::new()
         .route("/v2/status", get(handle_lan_status))
         .route("/v2/lan/pair/complete", post(handle_lan_pair_complete))
         .route("/v2/lan/pull-request", post(handle_pull_request))
         .merge(remote_chat_router)
+        .merge(remote_control_router)
         .with_state(lan_state)
         .fallback_service(build_transfer_router(shared_state));
 
@@ -270,6 +285,7 @@ struct LanServerState {
     events: Arc<dyn LanServerEvents>,
     shared: Arc<SharedLanServerState>,
     remote_chat: Arc<dyn RemoteChatApi>,
+    remote_control: Arc<dyn RemoteControlApi>,
 }
 
 async fn handle_lan_status(
@@ -326,7 +342,7 @@ async fn handle_pull_request(
     ))
 }
 
-async fn authenticate_remote_chat(
+async fn authenticate_remote_session(
     state: &LanServerState,
     headers: &HeaderMap,
 ) -> Result<(), ApiError> {
@@ -342,7 +358,7 @@ async fn handle_remote_chat_status(
     State(state): State<Arc<LanServerState>>,
     headers: HeaderMap,
 ) -> Result<Json<tt_contracts::remote_chat::RemoteChatSessionStatus>, ApiError> {
-    authenticate_remote_chat(&state, &headers).await?;
+    authenticate_remote_session(&state, &headers).await?;
     state
         .remote_chat
         .session_status()
@@ -356,7 +372,7 @@ async fn handle_remote_chat_catalog(
     headers: HeaderMap,
     Json(request): Json<RemoteChatSessionRequest>,
 ) -> Result<Json<tt_contracts::remote_chat::RemoteChatCatalog>, ApiError> {
-    authenticate_remote_chat(&state, &headers).await?;
+    authenticate_remote_session(&state, &headers).await?;
     state
         .remote_chat
         .list_catalog(&request.session_id)
@@ -370,7 +386,7 @@ async fn handle_remote_chat_chats(
     headers: HeaderMap,
     Json(request): Json<RemoteChatChatsRequest>,
 ) -> Result<Json<Vec<tt_contracts::remote_chat::RemoteChatSummary>>, ApiError> {
-    authenticate_remote_chat(&state, &headers).await?;
+    authenticate_remote_session(&state, &headers).await?;
     state
         .remote_chat
         .list_chats(&request.session_id, request.owner)
@@ -384,7 +400,7 @@ async fn handle_remote_chat_history(
     headers: HeaderMap,
     Json(request): Json<RemoteChatHistoryRequest>,
 ) -> Result<Json<tt_contracts::remote_chat::RemoteChatHistory>, ApiError> {
-    authenticate_remote_chat(&state, &headers).await?;
+    authenticate_remote_session(&state, &headers).await?;
     state
         .remote_chat
         .get_history(&request.session_id, request.target)
@@ -404,7 +420,7 @@ async fn handle_remote_chat_submit(
     ),
     ApiError,
 > {
-    authenticate_remote_chat(&state, &headers).await?;
+    authenticate_remote_session(&state, &headers).await?;
     let response = state
         .remote_chat
         .submit(&request.session_id, request.request)
@@ -418,7 +434,7 @@ async fn handle_remote_chat_events(
     headers: HeaderMap,
     Json(request): Json<RemoteChatEventsRequest>,
 ) -> Result<Json<tt_contracts::remote_chat::RemoteChatEventsPage>, ApiError> {
-    authenticate_remote_chat(&state, &headers).await?;
+    authenticate_remote_session(&state, &headers).await?;
     state
         .remote_chat
         .read_events(&request.session_id, request.after_sequence)
@@ -432,13 +448,40 @@ async fn handle_remote_chat_stop(
     headers: HeaderMap,
     Json(request): Json<RemoteChatStopRequest>,
 ) -> Result<StatusCode, ApiError> {
-    authenticate_remote_chat(&state, &headers).await?;
+    authenticate_remote_session(&state, &headers).await?;
     state
         .remote_chat
         .stop_generation(&request.session_id, &request.request_id)
         .await
         .map_err(ApiError::from)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn handle_remote_control_status(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+) -> Result<Json<tt_contracts::remote_control::RemoteControlSessionStatus>, ApiError> {
+    authenticate_remote_session(&state, &headers).await?;
+    state
+        .remote_control
+        .session_status()
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn handle_remote_control_invoke(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteControlInvokeRequest>,
+) -> Result<Json<tt_contracts::remote_control::RemoteControlValue>, ApiError> {
+    authenticate_remote_session(&state, &headers).await?;
+    state
+        .remote_control
+        .invoke(request)
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 #[derive(Debug)]
@@ -535,6 +578,7 @@ mod tests {
     use tt_contracts::lan_discovery::LanDiscoveryAnnouncement;
     use tt_ports::lan_sync::LanPairingClient;
     use tt_ports::remote_chat::RemoteChatApi;
+    use tt_ports::remote_control::RemoteControlApi;
     use ttsync_client::{ClientSyncEngine, ClientSyncOptions, ClientSyncTarget, NoopSyncObserver};
     use ttsync_contract::dataset::{
         DATASET_POLICY_VERSION, DATASET_SCOPE_FEATURE_V1, DatasetSelection,
@@ -561,6 +605,39 @@ mod tests {
     struct NoopInboundHandler;
 
     struct NoopRemoteChatApi;
+    struct NoopRemoteControlApi;
+
+    #[async_trait]
+    impl RemoteControlApi for NoopRemoteControlApi {
+        async fn stop_host_session(&self) -> Result<(), DomainError> {
+            Ok(())
+        }
+
+        async fn session_status(
+            &self,
+        ) -> Result<tt_contracts::remote_control::RemoteControlSessionStatus, DomainError> {
+            Ok(tt_contracts::remote_control::RemoteControlSessionStatus {
+                active: false,
+                session_id: None,
+            })
+        }
+
+        async fn invoke(
+            &self,
+            _request: RemoteControlInvokeRequest,
+        ) -> Result<tt_contracts::remote_control::RemoteControlValue, DomainError> {
+            Err(DomainError::Conflict(
+                "Remote Control is disabled in this test".to_string(),
+            ))
+        }
+
+        async fn publish_result(
+            &self,
+            _result: tt_contracts::remote_control::RemoteControlInvokeResult,
+        ) -> Result<(), DomainError> {
+            Ok(())
+        }
+    }
 
     #[async_trait]
     impl RemoteChatApi for NoopRemoteChatApi {
@@ -805,6 +882,7 @@ mod tests {
             recording_events(),
             crate::sync::workspace::empty_database_access(),
             Arc::new(NoopRemoteChatApi),
+            Arc::new(NoopRemoteControlApi),
         )
         .await
         .expect("spawn LAN Sync server");
@@ -890,7 +968,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn remote_chat_status_requires_a_paired_authenticated_session() {
+    async fn remote_control_and_chat_status_require_a_paired_authenticated_session() {
         let default_user_dir = temp_default_user_dir();
         let store = LanPeerStore::new(
             default_user_dir.clone(),
@@ -904,6 +982,7 @@ mod tests {
             recording_events(),
             crate::sync::workspace::empty_database_access(),
             Arc::new(NoopRemoteChatApi),
+            Arc::new(NoopRemoteControlApi),
         )
         .await
         .expect("spawn LAN Sync server");
@@ -914,17 +993,15 @@ mod tests {
         )
         .expect("pinned client");
 
-        let response = client
-            .http()
-            .get(
-                client
-                    .endpoint_url("/v2/remote-chat/status")
-                    .expect("Remote Chat status URL"),
-            )
-            .send()
-            .await
-            .expect("unauthenticated request");
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        for path in ["/v2/remote-chat/status", "/v2/remote-control/status"] {
+            let response = client
+                .http()
+                .get(client.endpoint_url(path).expect("remote status URL"))
+                .send()
+                .await
+                .expect("unauthenticated request");
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
 
         handle.shutdown();
         let _ = tokio::fs::remove_dir_all(default_user_dir).await;
@@ -964,6 +1041,7 @@ mod tests {
             events.clone(),
             crate::sync::workspace::empty_database_access(),
             Arc::new(NoopRemoteChatApi),
+            Arc::new(NoopRemoteControlApi),
         )
         .await
         .expect("spawn LAN Sync server");
@@ -1116,6 +1194,7 @@ mod tests {
             recording_events(),
             crate::sync::workspace::empty_database_access(),
             Arc::new(NoopRemoteChatApi),
+            Arc::new(NoopRemoteControlApi),
         )
         .await
         .expect("spawn LAN Sync server");

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { expect, test } from '@rstest/core';
 
 import { RemoteChatApp } from './RemoteChatApp';
+import { RemoteControlHostPanel } from './RemoteControlHostPanel';
 
 test('paired phone selects a desktop chat, sends text, and displays its reply', async () => {
     const user = userEvent.setup();
@@ -126,4 +127,31 @@ test('paired phone selects a desktop chat, sends text, and displays its reply', 
     expect(submitted[0]?.target).toEqual(target);
     expect(submitted[0]?.text).toBe('Hello from my phone');
     expect(readCount).toBeGreaterThan(0);
+});
+
+test('desktop explicitly starts and stops its Remote Control session', async () => {
+    const user = userEvent.setup();
+    let active = false;
+    const api: TauriTavernRemoteControlApi = {
+        host: {
+            available: true,
+            status: () => Promise.resolve({ active }),
+            startSession: () => {
+                active = true;
+                return Promise.resolve({ active, sessionId: 'control-session' });
+            },
+            stopSession: () => {
+                active = false;
+                return Promise.resolve();
+            },
+        },
+    };
+
+    render(<RemoteControlHostPanel api={api} tr={key => key} />);
+
+    await user.click(await screen.findByRole('button', { name: 'controlStartHost' }));
+    await screen.findByText('controlActive');
+    await user.click(screen.getByRole('button', { name: 'controlStopHost' }));
+
+    await waitFor(() => expect(screen.getByText('controlInactive')).toBeTruthy());
 });

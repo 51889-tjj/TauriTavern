@@ -24,5 +24,10 @@
     "remote_chat.hostNotActive": "请先在电脑上开启远程聊天。",
     "remote_chat.loading": "正在加载…",
     "remote_chat.close": "关闭",
-    "remote_chat.unknownError": "远程聊天请求失败。"
+    "remote_chat.unknownError": "远程聊天请求失败。",
+    "remote_chat.controlDescription": "开启后，已配对手机可以读取和设置这台电脑上的 TauriTavern。",
+    "remote_chat.controlStartHost": "开启远程控制",
+    "remote_chat.controlStopHost": "关闭远程控制",
+    "remote_chat.controlActive": "远程控制已开启",
+    "remote_chat.controlInactive": "远程控制未开启"
 }

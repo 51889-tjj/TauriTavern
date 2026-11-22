@@ -191,6 +191,11 @@ ESM `/scripts/secrets.js` 的 `writeSecret`、`deleteSecret`、`readSecretState`
   - 运行控制属于 Public Contract；模型回合、任务详情、工具目录和 Timeline 关系是 Project Contract，由对应 API 提供展示 DTO。
   - Session 历史中的 `compaction`、运行状态 `compacting_context`、`context_compaction_started` / `context_compacted` 事件与 `model_request_created` 的 `context`、`sessions.compact()`，以及 Agent 快照的 `contextLimits: { context, response, tokenizerModel }` 均为 Project Contract；字段与事件形状见 [Agent API](API/Agent.md)。
 
+- `api.remoteControl`：管理电脑端临时 Remote Control 会话。
+  - 当前为 Project Contract。`host.available`、`host.status()`、`host.startSession()` 和 `host.stopSession()` 只管理电脑端会话；启动前要求 LAN Sync 正在运行。
+  - LAN 配对不会自动开放远程控制。手机的客户端操作走独立壳的 TLS 固定通道；远程操作由 Rust 的 `RemoteControlOperation` 显式枚举限制，不暴露任意 Tauri invoke、HTTP 代理或文件路径。
+  - 当前允许列表与分阶段范围见 [Remote Control](RemoteControl.md)。
+
 - `api.llmConnections`：管理 Profile 引用的模型连接，见 [LLM Connection API](API/LlmConnections.md)。Profile 通过连接 ID 和模型 ID 绑定；Model Target 是界面的配置来源。
 
 - `api.skill`：管理本地知识包的导入、编辑、作用域与导出，见 [Skill API](API/Skill.md)。模型通过只读 `skills/` 工作区视图读取材料，经 `workspace.shell` 执行脚本；安装与替换由管理界面处理。

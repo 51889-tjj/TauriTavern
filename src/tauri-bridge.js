@@ -1,5 +1,7 @@
 // Core Tauri bridge for frontend modules.
 
+import { isLocalRemoteShellCommand, toRemoteControlOperation } from './tauri/remote-control/operations.js';
+
 function getTauri() {
     if (typeof window === 'undefined') {
         return null;
@@ -37,6 +39,40 @@ function withTauriArgumentAliases(args) {
 }
 
 export const invoke = (...args) => {
+    const remote = typeof window === 'undefined' ? null : window.__TAURITAVERN_REMOTE_CONTROL__;
+    const [command, commandArgs, options] = args;
+    if (
+        remote
+        && typeof command === 'string'
+        && !isLocalRemoteShellCommand(command)
+    ) {
+        if (!remote.deviceId || !remote.sessionId) {
+            throw new Error('Remote Control is not connected to a computer');
+        }
+        const fn = getTauri()?.core?.invoke;
+        if (typeof fn !== 'function') {
+            throw new Error('Tauri invoke is unavailable');
+        }
+        const normalizedArgs = args.length >= 2 && isPlainObject(commandArgs)
+            ? withTauriArgumentAliases(commandArgs)
+            : commandArgs;
+        const operation = toRemoteControlOperation(command, normalizedArgs, options);
+        return fn('remote_control_client_invoke', {
+            deviceId: remote.deviceId,
+            sessionId: remote.sessionId,
+            requestId: crypto.randomUUID(),
+            operation,
+        }).then(value => {
+            if (value?.kind === 'json') {
+                return value.value;
+            }
+            if (value?.kind === 'bytes' && Array.isArray(value.value)) {
+                return Uint8Array.from(value.value);
+            }
+            throw new Error('Remote Control returned an invalid response');
+        });
+    }
+
     const fn = getTauri()?.core?.invoke;
     if (typeof fn !== 'function') {
         throw new Error('Tauri invoke is unavailable');

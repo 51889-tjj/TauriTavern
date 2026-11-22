@@ -24,5 +24,10 @@
     "remote_chat.hostNotActive": "Start Remote Chat on the computer first.",
     "remote_chat.loading": "Loading…",
     "remote_chat.close": "Close",
-    "remote_chat.unknownError": "Remote Chat request failed."
+    "remote_chat.unknownError": "Remote Chat request failed.",
+    "remote_chat.controlDescription": "Paired phones can read and change TauriTavern settings on this computer while enabled.",
+    "remote_chat.controlStartHost": "Start Remote Control",
+    "remote_chat.controlStopHost": "Stop Remote Control",
+    "remote_chat.controlActive": "Remote Control is active",
+    "remote_chat.controlInactive": "Remote Control is not active"
 }

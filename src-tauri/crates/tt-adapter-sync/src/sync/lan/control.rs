@@ -15,6 +15,7 @@ use tt_ports::lan_sync::{
     LanInboundRequestHandler, LanServerControl, LanServerEvents, LanServerInfo,
 };
 use tt_ports::remote_chat::RemoteChatApi;
+use tt_ports::remote_control::RemoteControlApi;
 
 pub struct AxumLanServerControl {
     sync_root: PathBuf,
@@ -25,6 +26,7 @@ pub struct AxumLanServerControl {
     server: Mutex<Option<LanSyncServerHandle>>,
     database: Arc<dyn DatabaseFileAccess>,
     remote_chat: Arc<dyn RemoteChatApi>,
+    remote_control: Arc<dyn RemoteControlApi>,
 }
 
 impl AxumLanServerControl {
@@ -36,6 +38,7 @@ impl AxumLanServerControl {
         discovery: LanPeerDiscovery,
         database: Arc<dyn DatabaseFileAccess>,
         remote_chat: Arc<dyn RemoteChatApi>,
+        remote_control: Arc<dyn RemoteControlApi>,
     ) -> Self {
         Self {
             database,
@@ -46,6 +49,7 @@ impl AxumLanServerControl {
             discovery,
             server: Mutex::new(None),
             remote_chat,
+            remote_control,
         }
     }
 }
@@ -68,6 +72,7 @@ impl LanServerControl for AxumLanServerControl {
             self.events.clone(),
             self.database.clone(),
             self.remote_chat.clone(),
+            self.remote_control.clone(),
         )
         .await?;
         let info = handle.info();
@@ -90,6 +95,7 @@ impl LanServerControl for AxumLanServerControl {
 
     async fn stop(&self) -> Result<(), DomainError> {
         let remote_chat_result = self.remote_chat.stop_host_session().await;
+        let remote_control_result = self.remote_control.stop_host_session().await;
         let handle = self.server.lock().await.take();
         if let Some(handle) = handle {
             handle.shutdown();
@@ -97,7 +103,8 @@ impl LanServerControl for AxumLanServerControl {
         if let Err(error) = self.discovery.stop().await {
             tracing::warn!("Failed to release LAN discovery resources: {error}");
         }
-        remote_chat_result
+        remote_chat_result?;
+        remote_control_result
     }
 
     async fn running_info(&self) -> Option<LanServerInfo> {

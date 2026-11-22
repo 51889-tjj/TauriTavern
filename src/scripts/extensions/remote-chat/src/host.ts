@@ -27,6 +27,11 @@ const DEFAULT_MESSAGES = {
     loading: 'Loading…',
     close: 'Close',
     unknownError: 'Remote Chat request failed.',
+    controlDescription: 'Paired phones can control this computer while the temporary Remote Control session is active.',
+    controlStartHost: 'Start Remote Control',
+    controlStopHost: 'Stop Remote Control',
+    controlActive: 'Remote Control is active',
+    controlInactive: 'Remote Control is not active',
 } as const;
 
 export type RemoteChatMessageKey = keyof typeof DEFAULT_MESSAGES;
@@ -54,6 +59,14 @@ export function requireRemoteChatApi(): TauriTavernRemoteChatApi {
         throw new Error('TauriTavern Remote Chat Host API is unavailable');
     }
     return host.api.remoteChat;
+}
+
+export function requireRemoteControlApi(): TauriTavernRemoteControlApi {
+    const api = window.__TAURITAVERN__?.api?.remoteControl;
+    if (!api) {
+        throw new Error('TauriTavern Remote Control Host API is unavailable');
+    }
+    return api;
 }
 
 export async function waitForHostReady(): Promise<void> {

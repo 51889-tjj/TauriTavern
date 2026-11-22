@@ -251,6 +251,10 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         super::remote_chat_commands::remote_chat_client_submit,
         super::remote_chat_commands::remote_chat_client_read_events,
         super::remote_chat_commands::remote_chat_client_stop_generation,
+        super::remote_control_commands::remote_control_start_session,
+        super::remote_control_commands::remote_control_get_host_status,
+        super::remote_control_commands::remote_control_stop_session,
+        super::remote_control_commands::remote_control_publish_result,
         // Sync automation commands
         super::sync_automation_commands::sync_automation_get_config,
         super::sync_automation_commands::sync_automation_update_config,

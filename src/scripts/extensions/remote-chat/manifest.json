@@ -11,6 +11,6 @@
     },
     "author": "TauriTavern",
     "version": "0.1.0",
-    "description": "A paired-device LAN chat panel for remote access to a desktop TauriTavern session.",
+    "description": "Paired-device LAN chat and remote-control session management for desktop TauriTavern.",
     "homePage": "https://github.com/Darkatse/TauriTavern"
 }

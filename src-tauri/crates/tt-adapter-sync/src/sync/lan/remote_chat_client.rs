@@ -8,9 +8,13 @@ use tt_contracts::remote_chat::{
     RemoteChatSessionStatus, RemoteChatSubmit, RemoteChatSubmitResponse, RemoteChatSummary,
     RemoteChatTarget,
 };
+use tt_contracts::remote_control::{
+    RemoteControlInvokeRequest, RemoteControlSessionStatus, RemoteControlValue,
+};
 use tt_domain::errors::DomainError;
 use tt_domain::models::lan_sync::{LanSyncIdentity, LanSyncPairedDevice};
 use tt_ports::remote_chat::{RemoteChatClientConnector, RemoteChatClientSession};
+use tt_ports::remote_control::{RemoteControlClientConnector, RemoteControlClientSession};
 use ttsync_contract::session::SessionToken;
 
 use super::client::LanSyncClient;
@@ -27,18 +31,13 @@ impl HttpRemoteChatClientConnector {
             product_user_agent: product_user_agent.into(),
         }
     }
-}
 
-#[async_trait]
-impl RemoteChatClientConnector for HttpRemoteChatClientConnector {
-    async fn connect(
+    async fn connect_session(
         &self,
         peer: LanSyncPairedDevice,
         identity: LanSyncIdentity,
-    ) -> Result<Arc<dyn RemoteChatClientSession>, DomainError> {
+    ) -> Result<Arc<HttpRemoteChatClientSession>, DomainError> {
         let client = LanSyncClient::new(peer.base_url, peer.spki_sha256, &self.product_user_agent)?;
-        // Session-open authenticates the caller; the selected peer only determines
-        // the destination URL and TLS pin.
         let session = client
             .open_session(&identity.device_id, &identity.ed25519_seed)
             .await?;
@@ -51,6 +50,32 @@ impl RemoteChatClientConnector for HttpRemoteChatClientConnector {
                 expires_at_ms: session.expires_at_ms,
             }),
         }))
+    }
+}
+
+#[async_trait]
+impl RemoteChatClientConnector for HttpRemoteChatClientConnector {
+    async fn connect(
+        &self,
+        peer: LanSyncPairedDevice,
+        identity: LanSyncIdentity,
+    ) -> Result<Arc<dyn RemoteChatClientSession>, DomainError> {
+        let session: Arc<dyn RemoteChatClientSession> =
+            self.connect_session(peer, identity).await?;
+        Ok(session)
+    }
+}
+
+#[async_trait]
+impl RemoteControlClientConnector for HttpRemoteChatClientConnector {
+    async fn connect(
+        &self,
+        peer: LanSyncPairedDevice,
+        identity: LanSyncIdentity,
+    ) -> Result<Arc<dyn RemoteControlClientSession>, DomainError> {
+        let session: Arc<dyn RemoteControlClientSession> =
+            self.connect_session(peer, identity).await?;
+        Ok(session)
     }
 }
 
@@ -139,6 +164,24 @@ impl RemoteChatClientSession for HttpRemoteChatClientSession {
     async fn stop_generation(&self, session_id: &str, request_id: &str) -> Result<(), DomainError> {
         self.client
             .remote_chat_stop(&self.session_token().await?, session_id, request_id)
+            .await
+    }
+}
+
+#[async_trait]
+impl RemoteControlClientSession for HttpRemoteChatClientSession {
+    async fn session_status(&self) -> Result<RemoteControlSessionStatus, DomainError> {
+        self.client
+            .remote_control_status(&self.session_token().await?)
+            .await
+    }
+
+    async fn invoke(
+        &self,
+        request: RemoteControlInvokeRequest,
+    ) -> Result<RemoteControlValue, DomainError> {
+        self.client
+            .remote_control_invoke(&self.session_token().await?, request)
             .await
     }
 }

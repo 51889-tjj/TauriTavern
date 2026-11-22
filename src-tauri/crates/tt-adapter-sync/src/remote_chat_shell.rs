@@ -8,6 +8,10 @@ use tt_contracts::remote_chat::{
     RemoteChatSessionStatus, RemoteChatSubmit, RemoteChatSubmitResponse, RemoteChatSummary,
     RemoteChatTarget,
 };
+use tt_contracts::remote_control::{
+    RemoteControlInvokeRequest, RemoteControlInvokeResult, RemoteControlSessionStatus,
+    RemoteControlValue,
+};
 use tt_contracts::sync::{SyncExecutionFailure, SyncExecutionReport, SyncJob, SyncJobEvent};
 use tt_domain::errors::DomainError;
 use tt_domain::models::lan_sync::{
@@ -20,11 +24,12 @@ use tt_ports::lan_sync::{
     LanSyncSettingsRepository, PairingApproval,
 };
 use tt_ports::remote_chat::RemoteChatApi;
+use tt_ports::remote_control::RemoteControlApi;
 use tt_ports::sync::{DataChangeReconciler, SyncJobEventPublisher, SyncJobExecutor};
 use ttsync_contract::sync::{OverwritePolicy, SyncMode};
 
 /// Dependencies for the temporary LAN listener used only while pairing a
-/// Remote Chat client. The shell never accepts file sync or hosts chat sessions.
+/// Remote Control client. The shell never accepts file sync or hosts remote sessions.
 pub struct RemoteChatShellAdapters {
     pub database_file_access: Arc<dyn DatabaseFileAccess>,
     pub discovery_host: Arc<dyn LanDiscoveryHost>,
@@ -32,6 +37,7 @@ pub struct RemoteChatShellAdapters {
     pub lan_sync_settings: Arc<dyn LanSyncSettingsRepository>,
     pub pairing_approval: Arc<dyn PairingApproval>,
     pub remote_chat_api: Arc<dyn RemoteChatApi>,
+    pub remote_control_api: Arc<dyn RemoteControlApi>,
     pub server_events: Arc<dyn LanServerEvents>,
     pub sync_events: Arc<dyn SyncJobEventPublisher>,
     pub sync_executor: Arc<dyn SyncJobExecutor>,
@@ -47,6 +53,7 @@ impl RemoteChatShellAdapters {
             lan_sync_settings: Arc::new(ShellLanSyncSettings),
             pairing_approval: Arc::new(RejectInboundPairing),
             remote_chat_api: Arc::new(DisabledRemoteChatApi),
+            remote_control_api: Arc::new(DisabledRemoteControlApi),
             server_events: Arc::new(ShellServerEvents),
             sync_events: Arc::new(NoopSyncEvents),
             sync_executor: Arc::new(DisabledSyncExecutor),
@@ -85,7 +92,7 @@ impl LanSyncSettingsRepository for ShellLanSyncSettings {
         _preferences: &SyncPreferences,
     ) -> Result<(), DomainError> {
         Err(DomainError::InvalidData(
-            "LAN Sync preferences are not available in the Remote Chat shell".to_string(),
+            "LAN Sync preferences are not available in the Remote Control shell".to_string(),
         ))
     }
 }
@@ -135,7 +142,7 @@ impl LanInboundRequestHandler for DisabledLanInbound {
         _request: LanPairCompleteRequest,
     ) -> Result<LanPairCompleteResponse, DomainError> {
         Err(DomainError::AuthenticationError(
-            "The Remote Chat shell does not accept inbound pairing requests".to_string(),
+            "The Remote Control shell does not accept inbound pairing requests".to_string(),
         ))
     }
 
@@ -190,16 +197,23 @@ impl SyncJobEventPublisher for NoopSyncEvents {
 }
 
 struct DisabledRemoteChatApi;
+struct DisabledRemoteControlApi;
 
 fn shell_host_unavailable() -> DomainError {
     DomainError::InvalidData(
-        "The Remote Chat shell is a client and cannot host Remote Chat sessions".to_string(),
+        "The Remote Control shell is a client and cannot host Remote Chat sessions".to_string(),
+    )
+}
+
+fn shell_remote_control_unavailable() -> DomainError {
+    DomainError::InvalidData(
+        "The Remote Control shell is a client and cannot host Remote Control sessions".to_string(),
     )
 }
 
 fn file_sync_unavailable() -> DomainError {
     DomainError::InvalidData(
-        "LAN Sync file transfer is not available in the Remote Chat shell".to_string(),
+        "LAN Sync file transfer is not available in the Remote Control shell".to_string(),
     )
 }
 
@@ -255,5 +269,27 @@ impl RemoteChatApi for DisabledRemoteChatApi {
         _request_id: &str,
     ) -> Result<(), DomainError> {
         Err(shell_host_unavailable())
+    }
+}
+
+#[async_trait]
+impl RemoteControlApi for DisabledRemoteControlApi {
+    async fn stop_host_session(&self) -> Result<(), DomainError> {
+        Ok(())
+    }
+
+    async fn session_status(&self) -> Result<RemoteControlSessionStatus, DomainError> {
+        Err(shell_remote_control_unavailable())
+    }
+
+    async fn invoke(
+        &self,
+        _request: RemoteControlInvokeRequest,
+    ) -> Result<RemoteControlValue, DomainError> {
+        Err(shell_remote_control_unavailable())
+    }
+
+    async fn publish_result(&self, _result: RemoteControlInvokeResult) -> Result<(), DomainError> {
+        Err(shell_remote_control_unavailable())
     }
 }

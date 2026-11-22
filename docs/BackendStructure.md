@@ -69,12 +69,12 @@ src-tauri/
     └── tt-adapter-archive
 ```
 
-`remote-chat-shell` 是轻量 Remote Chat iOS 产品的独立 host，不是完整 TauriTavern 的移动构建目标。它位于 `crates/remote-chat-shell` 以复用同一仓库源码，但声明自己的 Cargo workspace 并从根 workspace 排除，避免 iOS/Xcode 构建选中完整 `tauritavern` 默认包。主 host 仍是根 workspace 的默认 member；两个 host 复用同一 application service、contracts 与 adapter。当前 host 不再承载所有后端实现；用例、端口、契约、领域和具体 adapter 已经被拆成独立 Cargo crate。后续维护重点不是继续追求更多 crate，而是避免边界回流，确保每个新增能力都落在正确变化轴上。
+`remote-chat-shell` 是独立 iOS Remote Control 客户端 host，不是完整 TauriTavern 的移动后端构建目标。它位于 `crates/remote-chat-shell` 以复用同一仓库源码，但声明自己的 Cargo workspace 并从根 workspace 排除，避免 iOS/Xcode 构建选中完整 `tauritavern` 默认包。它打包完整前端并只装配配对、证书固定与远程客户端服务；电脑仍是唯一的数据和模型 host。主 host 仍是根 workspace 的默认 member；两个 host 复用 application service、contracts 与 adapter。当前 host 不再承载所有后端实现；用例、端口、契约、领域和具体 adapter 已经被拆成独立 Cargo crate。后续维护重点不是继续追求更多 crate，而是避免边界回流，确保每个新增能力都落在正确变化轴上。
 
 | crate | 当前职责 |
 | --- | --- |
 | `tauritavern` | Tauri host、presentation command、composition root、host-bound infrastructure、platform glue |
-| `remote-chat-shell` | 独立 Cargo workspace 的 Remote Chat 客户端 host；只装配配对、证书固定客户端和 Remote Chat UI，不承载完整数据/模型 host |
+| `remote-chat-shell` | 独立 Cargo workspace 的 Remote Control 客户端 host；打包完整前端，只装配配对、证书固定和受限远程客户端，不承载完整数据/模型 host |
 | `tt-domain` | 领域模型、值对象、领域错误、纯规则 |
 | `tt-contracts` | DTO、事件、payload、通用值契约、observability contract |
 | `tt-ports` | repository / gateway / runtime trait、Host Resource opened-source port |
@@ -169,7 +169,7 @@ SillyTavern frontend / extension / script
 
 ## 6. Host 边界
 
-`tauritavern` 与 `remote-chat-shell` 是最外层 host crate。它们可以知道所需的 concrete implementation，但只应在 composition root 的明确边界处使用它们；Remote Chat shell 只依赖远程聊天所需的 adapter，不组装完整产品能力。
+`tauritavern` 与 `remote-chat-shell` 是最外层 host crate。它们可以知道所需的 concrete implementation，但只应在 composition root 的明确边界处使用它们；Remote Control shell 只依赖配对和受限远程客户端所需的 adapter，不组装完整数据/模型 host。
 
 主要目录：
 
@@ -228,7 +228,7 @@ src-tauri/crates/tauritavern/src/
 
 ### 6.4 平台事实
 
-编译目标只在 host crate 读取：`tauritavern` 与独立 `remote-chat-shell` 各自的 `platform/identity.rs` 以 `HOST_IDENTITY`（`HostPlatform` + `HostKind`，类型在 `tt-contracts::host`）作为本 host 的唯一来源。完整 TauriTavern 将它注入主前端（见 `docs/FrontendHostContract.md` §2.2）；轻量壳只使用自身的编译目标身份。
+编译目标只在 host crate 读取：`tauritavern` 与独立 `remote-chat-shell` 各自的 `platform/identity.rs` 以 `HOST_IDENTITY`（`HostPlatform` + `HostKind`，类型在 `tt-contracts::host`）作为本 host 的唯一来源。完整 TauriTavern 将它注入主前端（见 `docs/FrontendHostContract.md` §2.2）；独立壳也以自身编译目标身份注入完整前端。
 
 - `HostKind` 取 Tauri 的 `desktop` / `mobile` 编译别名，与命令和插件的门控一致。OpenHarmony 的 `target_os` 是 `linux`，以 `target_env = "ohos"` 区分。
 - host 内外壳类别用 `cfg(desktop)` / `cfg(mobile)`，系统 API 用 `target_os` / `target_env`。`Cargo.toml` 的 target 依赖表看不到这两个别名，是唯一需要写完整平台组合的地方。

@@ -9,12 +9,17 @@ interface Window {
     __TAURI__?: any;
     __TAURI_RUNNING__?: boolean;
     __TAURITAVERN_HOST__?: Readonly<import('./scripts/util/host-identity.js').HostIdentity>;
+    __TAURITAVERN_REMOTE_SHELL__?: boolean;
 
     __TAURITAVERN_MAIN_READY__?: Promise<void>;
     __TAURITAVERN_DEV_SW_READY__?: Promise<void>;
 
     // TauriTavern host contract (public globals)
     __TAURITAVERN__?: TauriTavernHostAbi;
+    __TAURITAVERN_REMOTE_CONTROL__?: {
+        deviceId: string;
+        sessionId: string;
+    };
 
     // SillyTavern ecosystem library shim ABI
     _?: any;
@@ -1405,6 +1410,15 @@ type TauriTavernRemoteChatSessionStatus = {
     sessionId?: string;
 };
 
+type TauriTavernRemoteControlApi = {
+    host: {
+        available: boolean;
+        status: () => Promise<TauriTavernRemoteChatSessionStatus>;
+        startSession: () => Promise<TauriTavernRemoteChatSessionStatus>;
+        stopSession: () => Promise<void>;
+    };
+};
+
 type TauriTavernRemoteChatCharacter = {
     characterName: string;
     displayName: string;
@@ -1510,6 +1524,7 @@ type TauriTavernHostApi = {
     worldInfo?: TauriTavernWorldInfoApi;
     extension?: TauriTavernExtensionApi;
     remoteChat?: TauriTavernRemoteChatApi;
+    remoteControl?: TauriTavernRemoteControlApi;
 };
 
 type TauriTavernHostAbi = {

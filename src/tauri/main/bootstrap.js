@@ -37,7 +37,9 @@ import { installMcpApi } from './api/mcp.js';
 import { installSkillApi } from './api/skill.js';
 import { installWorldInfoApi } from './api/world-info.js';
 import { installRemoteChatApi } from './api/remote-chat.js';
+import { installRemoteControlApi } from './api/remote-control.js';
 import { installRemoteChatDesktopBridge } from './services/remote-chat/desktop-bridge.js';
+import { installRemoteControlDesktopBridge } from './services/remote-control/desktop-bridge.js';
 import { initializeTauriIntegration } from './bootstrap/initialize-tauri-integration.js';
 import {
     getMethod,
@@ -269,6 +271,18 @@ export function bootstrapTauriMain() {
         .then(() => remoteChatHostBootstrap.markDesktopBridgeReady())
         .catch(error => {
             console.error('[TauriTavern] Failed to install Remote Chat desktop bridge:', error);
+        });
+    const remoteControlHostBootstrap = installRemoteControlApi(context);
+    void installRemoteControlDesktopBridge({
+        safeInvoke: context.safeInvoke,
+        invokeTransport: context.invokeTransport,
+        getSessionId: remoteControlHostBootstrap.getSessionId,
+        markSessionStarted: remoteControlHostBootstrap.markSessionStarted,
+        markSessionEnded: remoteControlHostBootstrap.markSessionEnded,
+    })
+        .then(() => remoteControlHostBootstrap.markDesktopBridgeReady())
+        .catch(error => {
+            console.error('[TauriTavern] Failed to install Remote Control desktop bridge:', error);
         });
     installMainApiOptionParking();
     installWorldInfoGlobalSelectorSelect2Enforcer();

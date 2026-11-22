@@ -1,8 +1,0 @@
-{
-  "name": "tauritavern-remote-chat-shell",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "tauri": "node ../scripts/remote-chat-shell.mjs"
-  }
-}

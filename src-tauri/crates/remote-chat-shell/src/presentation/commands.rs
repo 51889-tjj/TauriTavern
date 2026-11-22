@@ -6,10 +6,18 @@ use tt_contracts::remote_chat::{
     RemoteChatSessionStatus, RemoteChatSubmit, RemoteChatSubmitResponse, RemoteChatSummary,
     RemoteChatTarget,
 };
+use tt_contracts::remote_control::{
+    RemoteControlOperation, RemoteControlSessionStatus, RemoteControlValue,
+};
 
 use crate::app::composition::ShellServices;
 
-const SHELL_DEVICE_NAME: &str = "TauriTavern Remote Chat";
+const SHELL_DEVICE_NAME: &str = "TauriTavern Remote";
+
+#[tauri::command]
+pub(crate) fn get_window_snapshot() -> Option<tt_contracts::window_layout::WindowSnapshot> {
+    None
+}
 
 #[tauri::command]
 pub(crate) async fn lan_sync_list_devices(
@@ -166,6 +174,54 @@ pub(crate) async fn remote_chat_client_stop_generation(
     services
         .remote_chat_client
         .stop_generation(&device_id, &session_id, &request_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn remote_control_client_connect(
+    services: State<'_, Arc<ShellServices>>,
+    device_id: String,
+) -> Result<RemoteControlSessionStatus, String> {
+    services
+        .remote_control_client
+        .connect(&device_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn remote_control_client_disconnect(
+    services: State<'_, Arc<ShellServices>>,
+    device_id: String,
+) -> Result<(), String> {
+    services.remote_control_client.disconnect(&device_id).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn remote_control_client_status(
+    services: State<'_, Arc<ShellServices>>,
+    device_id: String,
+) -> Result<RemoteControlSessionStatus, String> {
+    services
+        .remote_control_client
+        .session_status(&device_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn remote_control_client_invoke(
+    services: State<'_, Arc<ShellServices>>,
+    device_id: String,
+    session_id: String,
+    request_id: String,
+    operation: RemoteControlOperation,
+) -> Result<RemoteControlValue, String> {
+    services
+        .remote_control_client
+        .invoke(&device_id, &session_id, &request_id, operation)
         .await
         .map_err(|error| error.to_string())
 }

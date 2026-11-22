@@ -11,7 +11,11 @@ use crate::presentation::commands;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default();
+    let builder = tauri::Builder::default().plugin(
+        tauri::plugin::Builder::<tauri::Wry>::new("remote_shell_identity")
+            .js_init_script(crate::platform::identity::initialization_script())
+            .build(),
+    );
 
     #[cfg(target_os = "ios")]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
@@ -23,6 +27,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::get_window_snapshot,
             commands::lan_sync_list_devices,
             commands::lan_sync_request_pairing,
             commands::remote_chat_client_connect,
@@ -34,6 +39,10 @@ pub fn run() {
             commands::remote_chat_client_submit,
             commands::remote_chat_client_read_events,
             commands::remote_chat_client_stop_generation,
+            commands::remote_control_client_connect,
+            commands::remote_control_client_disconnect,
+            commands::remote_control_client_status,
+            commands::remote_control_client_invoke,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run TauriTavern Remote");

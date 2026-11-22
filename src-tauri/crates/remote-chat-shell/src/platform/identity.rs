@@ -27,3 +27,19 @@ pub const HOST_IDENTITY: HostIdentity = HostIdentity {
     platform: PLATFORM,
     kind: KIND,
 };
+
+pub fn initialization_script() -> String {
+    let platform = HOST_IDENTITY.platform.as_str();
+    let kind = match HOST_IDENTITY.kind {
+        HostKind::Desktop => "desktop",
+        HostKind::Mobile => "mobile",
+    };
+    format!(
+        "if (window === window.top) {{ \
+         if (!window.__TAURITAVERN_HOST__) {{ \
+         Object.defineProperty(window, '__TAURITAVERN_HOST__', {{ value: Object.freeze({{ platform: '{platform}', kind: '{kind}' }}) }}); \
+         }} \
+         Object.defineProperty(window, '__TAURITAVERN_REMOTE_SHELL__', {{ value: true }}); \
+         }}"
+    )
+}

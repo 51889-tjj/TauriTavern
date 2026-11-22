@@ -9,17 +9,19 @@ use tt_adapter_sync::{
 };
 use tt_application::services::lan_sync_service::{LanSyncRuntimeState, LanSyncService};
 use tt_application::services::remote_chat_client_service::RemoteChatClientService;
+use tt_application::services::remote_control_client_service::RemoteControlClientService;
 use tt_application::services::sync_job_coordinator::SyncJobCoordinator;
 use tt_ports::lan_discovery::LanDeviceDiscovery;
 use tt_ports::lan_sync::LanServerControl;
 
 use crate::platform::identity::HOST_IDENTITY;
 
-const PRODUCT_USER_AGENT: &str = "TauriTavernRemoteChat/0.1.0";
+const PRODUCT_USER_AGENT: &str = "TauriTavernRemote/0.1.0";
 
 pub struct ShellServices {
     pub lan_sync: Arc<LanSyncService>,
     pub remote_chat_client: RemoteChatClientService,
+    pub remote_control_client: RemoteControlClientService,
 }
 
 pub fn build_services(default_user_dir: PathBuf) -> ShellServices {
@@ -38,6 +40,7 @@ pub fn build_services(default_user_dir: PathBuf) -> ShellServices {
         discovery.clone(),
         adapters.database_file_access,
         adapters.remote_chat_api,
+        adapters.remote_control_api,
     ));
 
     let coordinator = Arc::new(SyncJobCoordinator::new(
@@ -59,13 +62,14 @@ pub fn build_services(default_user_dir: PathBuf) -> ShellServices {
         coordinator,
     ));
 
-    let remote_chat_client = RemoteChatClientService::new(
-        peer_store,
-        Arc::new(HttpRemoteChatClientConnector::new(PRODUCT_USER_AGENT)),
-    );
+    let client_connector = Arc::new(HttpRemoteChatClientConnector::new(PRODUCT_USER_AGENT));
+    let remote_chat_client =
+        RemoteChatClientService::new(peer_store.clone(), client_connector.clone());
+    let remote_control_client = RemoteControlClientService::new(peer_store, client_connector);
 
     ShellServices {
         lan_sync,
         remote_chat_client,
+        remote_control_client,
     }
 }
