@@ -43,6 +43,7 @@ pub fn run() {
             commands::remote_control_client_disconnect,
             commands::remote_control_client_status,
             commands::remote_control_client_invoke,
+            commands::remote_control_client_get_sillytavern_settings,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run TauriTavern Remote");

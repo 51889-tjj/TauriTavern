@@ -26,7 +26,8 @@ use tt_contracts::remote_chat::{
     RemoteChatSubmitResponse, RemoteChatSummary, RemoteChatTarget,
 };
 use tt_contracts::remote_control::{
-    RemoteControlInvokeRequest, RemoteControlSessionStatus, RemoteControlValue,
+    REMOTE_CONTROL_MAX_SETTINGS_BYTES, RemoteControlInvokeRequest, RemoteControlSessionStatus,
+    RemoteControlSettingsRequest, RemoteControlValue,
 };
 use tt_contracts::sync::SyncOperationOptions;
 use tt_domain::errors::DomainError;
@@ -240,6 +241,29 @@ impl LanSyncClient {
         read_remote_control_json(response).await
     }
 
+    pub async fn remote_control_settings(
+        &self,
+        session_token: &SessionToken,
+        session_id: &str,
+    ) -> Result<Vec<u8>, DomainError> {
+        let response = self
+            .inner
+            .http()
+            .post(self.inner.endpoint_url("/v2/remote-control/settings")?)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                bearer_auth_value(session_token),
+            )
+            .json(&RemoteControlSettingsRequest {
+                session_id: session_id.to_string(),
+            })
+            .send()
+            .await
+            .map_err(|error| DomainError::Transient(error.to_string()))?;
+        let response = ensure_success(response, "Remote Control settings read failed").await?;
+        read_remote_control_bytes(response, REMOTE_CONTROL_MAX_SETTINGS_BYTES).await
+    }
+
     pub async fn remote_chat_catalog(
         &self,
         session_token: &SessionToken,
@@ -435,6 +459,35 @@ async fn read_remote_control_json<T: DeserializeOwned>(
     }
 
     serde_json::from_slice(&body).map_err(|error| DomainError::InvalidData(error.to_string()))
+}
+
+async fn read_remote_control_bytes(
+    mut response: Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>, DomainError> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return Err(DomainError::InvalidData(
+            "Remote Control settings exceed the allowed size".to_string(),
+        ));
+    }
+
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| DomainError::Transient(error.to_string()))?
+    {
+        if body.len().saturating_add(chunk.len()) > max_bytes {
+            return Err(DomainError::InvalidData(
+                "Remote Control settings exceed the allowed size".to_string(),
+            ));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 pub struct HttpLanPairingClient {

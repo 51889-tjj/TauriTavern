@@ -8,25 +8,6 @@ function errorText(error) {
     return message.slice(0, MAX_REMOTE_CONTROL_ERROR_CHARS);
 }
 
-function bytesFrom(value) {
-    if (value instanceof Uint8Array) {
-        return value;
-    }
-    if (value instanceof ArrayBuffer) {
-        return new Uint8Array(value);
-    }
-    throw new Error('Desktop returned an invalid settings byte response');
-}
-
-function base64From(value) {
-    const bytes = bytesFrom(value);
-    let binary = '';
-    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-        binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-    }
-    return btoa(binary);
-}
-
 async function invokeOperation(operation, { safeInvoke, invokeTransport }) {
     switch (operation?.kind) {
         case 'wait_for_backend_ready':
@@ -39,11 +20,6 @@ async function invokeOperation(operation, { safeInvoke, invokeTransport }) {
             return safeInvoke('get_tauritavern_settings');
         case 'update_tauri_tavern_settings':
             return safeInvoke('update_tauritavern_settings', { dto: operation.dto });
-        case 'get_sillytavern_settings':
-            return {
-                kind: 'bytes_base64',
-                value: base64From(await safeInvoke('get_sillytavern_settings')),
-            };
         case 'get_personas':
             return safeInvoke('get_personas');
         case 'get_bootstrap_metadata':
@@ -166,12 +142,10 @@ export async function installRemoteControlDesktopBridge(options) {
                 }
 
                 const result = await invokeOperation(payload.operation, options);
-                outcome = result?.kind === 'bytes_base64' && typeof result.value === 'string'
-                    ? { kind: 'success', value: result }
-                    : {
-                        kind: 'success',
-                        value: { kind: 'json', value: result === undefined ? null : result },
-                    };
+                outcome = {
+                    kind: 'success',
+                    value: { kind: 'json', value: result === undefined ? null : result },
+                };
             } catch (error) {
                 outcome = { kind: 'failure', value: errorText(error) };
             }

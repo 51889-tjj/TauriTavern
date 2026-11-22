@@ -176,6 +176,12 @@ impl RemoteControlClientSession for HttpRemoteChatClientSession {
             .await
     }
 
+    async fn get_sillytavern_settings(&self, session_id: &str) -> Result<Vec<u8>, DomainError> {
+        self.client
+            .remote_control_settings(&self.session_token().await?, session_id)
+            .await
+    }
+
     async fn invoke(
         &self,
         request: RemoteControlInvokeRequest,

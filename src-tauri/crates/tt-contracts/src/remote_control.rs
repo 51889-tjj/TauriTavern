@@ -4,6 +4,7 @@ use serde_json::Value;
 pub const REMOTE_CONTROL_MAX_REQUEST_ID_CHARS: usize = 128;
 pub const REMOTE_CONTROL_MAX_OPERATION_BYTES: usize = 256 * 1024;
 pub const REMOTE_CONTROL_MAX_RESULT_BYTES: usize = 8 * 1024 * 1024;
+pub const REMOTE_CONTROL_MAX_SETTINGS_BYTES: usize = 32 * 1024 * 1024;
 pub const REMOTE_CONTROL_MAX_PENDING_REQUESTS: usize = 16;
 pub const REMOTE_CONTROL_REQUEST_TIMEOUT_SECS: u64 = 60;
 
@@ -31,8 +32,6 @@ pub enum RemoteControlOperation {
     UpdateTauriTavernSettings {
         dto: Value,
     },
-    #[serde(rename = "get_sillytavern_settings")]
-    GetSillyTavernSettings,
     GetPersonas,
     GetBootstrapMetadata,
     GetExtensions,
@@ -114,10 +113,15 @@ pub struct RemoteControlInvokeRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteControlSettingsRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum RemoteControlValue {
     Json(Value),
-    BytesBase64(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,19 +169,9 @@ mod tests {
         assert_eq!(value["kind"], "update_tauri_tavern_settings");
         assert_eq!(value["dto"]["close_to_tray_on_close"], true);
         assert_eq!(
-            serde_json::to_value(RemoteControlOperation::GetSillyTavernSettings)
-                .expect("serialize settings read")["kind"],
-            "get_sillytavern_settings"
-        );
-        assert_eq!(
             serde_json::to_value(RemoteControlOperation::GetTauriTavernSettings)
                 .expect("serialize TauriTavern settings read")["kind"],
             "get_tauri_tavern_settings"
-        );
-        assert_eq!(
-            serde_json::to_value(RemoteControlValue::BytesBase64("AQID".to_string()))
-                .expect("serialize byte response")["kind"],
-            "bytes_base64"
         );
 
         let unsupported = serde_json::from_value::<RemoteControlOperation>(serde_json::json!({

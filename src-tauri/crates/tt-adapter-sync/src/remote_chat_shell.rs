@@ -282,6 +282,10 @@ impl RemoteControlApi for DisabledRemoteControlApi {
         Err(shell_remote_control_unavailable())
     }
 
+    async fn get_sillytavern_settings(&self, _session_id: &str) -> Result<Vec<u8>, DomainError> {
+        Err(shell_remote_control_unavailable())
+    }
+
     async fn invoke(
         &self,
         _request: RemoteControlInvokeRequest,

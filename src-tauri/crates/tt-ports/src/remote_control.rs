@@ -12,6 +12,7 @@ use tt_domain::models::lan_sync::{LanSyncIdentity, LanSyncPairedDevice};
 pub trait RemoteControlApi: Send + Sync {
     async fn stop_host_session(&self) -> Result<(), DomainError>;
     async fn session_status(&self) -> Result<RemoteControlSessionStatus, DomainError>;
+    async fn get_sillytavern_settings(&self, session_id: &str) -> Result<Vec<u8>, DomainError>;
     async fn invoke(
         &self,
         request: RemoteControlInvokeRequest,
@@ -26,6 +27,7 @@ pub trait RemoteControlCommandPublisher: Send + Sync {
 #[async_trait]
 pub trait RemoteControlClientSession: Send + Sync {
     async fn session_status(&self) -> Result<RemoteControlSessionStatus, DomainError>;
+    async fn get_sillytavern_settings(&self, session_id: &str) -> Result<Vec<u8>, DomainError>;
     async fn invoke(
         &self,
         request: RemoteControlInvokeRequest,

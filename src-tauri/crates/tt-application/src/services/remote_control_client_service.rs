@@ -84,6 +84,17 @@ impl RemoteControlClientService {
             .await
     }
 
+    pub async fn get_sillytavern_settings(
+        &self,
+        device_id: &str,
+        session_id: &str,
+    ) -> Result<Vec<u8>, DomainError> {
+        self.client(device_id)
+            .await?
+            .get_sillytavern_settings(session_id)
+            .await
+    }
+
     async fn client(
         &self,
         device_id: &str,

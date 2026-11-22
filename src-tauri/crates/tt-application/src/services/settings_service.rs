@@ -624,7 +624,7 @@ fn validate_agent_retention_settings(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::dto::settings_dto::UpdateAgentRunRetentionSettingsDto;
     use async_trait::async_trait;
@@ -917,9 +917,45 @@ mod tests {
         }
     }
 
+    struct RemoteControlTestAvatars;
+
+    #[async_trait::async_trait]
+    impl AvatarRepository for RemoteControlTestAvatars {
+        async fn get_personas(&self) -> Result<Personas, DomainError> {
+            Ok(Personas::default())
+        }
+        async fn save_persona(
+            &self,
+            _: &str,
+            _: &tt_domain::models::persona::Persona,
+        ) -> Result<(), DomainError> {
+            Ok(())
+        }
+        async fn import_personas(&self, _: &Personas) -> Result<(), DomainError> {
+            Ok(())
+        }
+        async fn get_avatars(&self) -> Result<Vec<tt_domain::models::avatar::Avatar>, DomainError> {
+            Ok(Vec::new())
+        }
+        async fn delete_avatar(&self, _: &str) -> Result<(), DomainError> {
+            Ok(())
+        }
+        async fn upload_avatar(
+            &self,
+            _: &std::path::Path,
+            _: Option<String>,
+            _: Option<tt_domain::models::avatar::CropInfo>,
+        ) -> Result<tt_domain::models::avatar::AvatarUploadResult, DomainError> {
+            Err(DomainError::InvalidData(
+                "Avatar upload is not used by the Remote Control settings test".to_string(),
+            ))
+        }
+    }
+
     #[derive(Default)]
     struct TestSettingsRepository {
         settings: Mutex<TauriTavernSettings>,
+        allow_sillytavern_settings_read: bool,
     }
 
     #[async_trait]
@@ -941,7 +977,11 @@ mod tests {
         }
 
         async fn load_user_settings(&self) -> Result<UserSettings, DomainError> {
-            unreachable!()
+            if self.allow_sillytavern_settings_read {
+                Ok(UserSettings::default())
+            } else {
+                unreachable!()
+            }
         }
 
         async fn begin_commit(
@@ -980,7 +1020,11 @@ mod tests {
         async fn get_sillytavern_settings_signature(
             &self,
         ) -> Result<SettingsAggregateSignature, DomainError> {
-            unreachable!()
+            if self.allow_sillytavern_settings_read {
+                Ok(SettingsAggregateSignature::default())
+            } else {
+                unreachable!()
+            }
         }
 
         async fn get_themes(&self) -> Result<Vec<UserSettings>, DomainError> {
@@ -1094,5 +1138,17 @@ mod tests {
                 Ok(None)
             }
         }
+    }
+
+    pub(crate) fn remote_control_test_settings_service() -> Arc<SettingsService> {
+        Arc::new(SettingsService::new(
+            Arc::new(RemoteControlTestAvatars),
+            Arc::new(TestSettingsRepository {
+                allow_sillytavern_settings_read: true,
+                ..TestSettingsRepository::default()
+            }),
+            Arc::new(TestRequestProxyRuntime::default()),
+            Arc::new(TestChatBackupRuntime::default()),
+        ))
     }
 }

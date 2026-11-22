@@ -15,6 +15,7 @@ const LOCAL_REMOTE_SHELL_COMMANDS = new Set([
     'remote_control_client_disconnect',
     'remote_control_client_status',
     'remote_control_client_invoke',
+    'remote_control_client_get_sillytavern_settings',
 ]);
 
 function isByteBuffer(value) {
@@ -58,8 +59,6 @@ export function toRemoteControlOperation(command, args, options) {
             return { kind: 'get_tauri_tavern_settings' };
         case 'update_tauritavern_settings':
             return { kind: 'update_tauri_tavern_settings', dto: args?.dto };
-        case 'get_sillytavern_settings':
-            return { kind: 'get_sillytavern_settings' };
         case 'get_personas':
             return { kind: 'get_personas' };
         case 'get_bootstrap_metadata':

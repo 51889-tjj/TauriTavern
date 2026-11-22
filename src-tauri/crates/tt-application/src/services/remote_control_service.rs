@@ -6,12 +6,14 @@ use tokio::sync::{Mutex, oneshot};
 use tt_contracts::remote_control::{
     REMOTE_CONTROL_MAX_OPERATION_BYTES, REMOTE_CONTROL_MAX_PENDING_REQUESTS,
     REMOTE_CONTROL_MAX_REQUEST_ID_CHARS, REMOTE_CONTROL_MAX_RESULT_BYTES,
-    REMOTE_CONTROL_REQUEST_TIMEOUT_SECS, RemoteControlDesktopCommand, RemoteControlInvokeRequest,
-    RemoteControlInvokeResult, RemoteControlOutcome, RemoteControlSessionStatus,
-    RemoteControlValue,
+    REMOTE_CONTROL_MAX_SETTINGS_BYTES, REMOTE_CONTROL_REQUEST_TIMEOUT_SECS,
+    RemoteControlDesktopCommand, RemoteControlInvokeRequest, RemoteControlInvokeResult,
+    RemoteControlOutcome, RemoteControlSessionStatus, RemoteControlValue,
 };
 use tt_domain::errors::DomainError;
 use tt_ports::remote_control::{RemoteControlApi, RemoteControlCommandPublisher};
+
+use super::settings_service::SettingsService;
 
 type PendingResponse = oneshot::Sender<Result<RemoteControlValue, String>>;
 
@@ -23,13 +25,18 @@ struct RemoteControlRuntime {
 
 pub struct RemoteControlService {
     command_publisher: Arc<dyn RemoteControlCommandPublisher>,
+    settings_service: Arc<SettingsService>,
     runtime: Mutex<RemoteControlRuntime>,
 }
 
 impl RemoteControlService {
-    pub fn new(command_publisher: Arc<dyn RemoteControlCommandPublisher>) -> Self {
+    pub fn new(
+        command_publisher: Arc<dyn RemoteControlCommandPublisher>,
+        settings_service: Arc<SettingsService>,
+    ) -> Self {
         Self {
             command_publisher,
+            settings_service,
             runtime: Mutex::new(RemoteControlRuntime::default()),
         }
     }
@@ -67,6 +74,29 @@ impl RemoteControlService {
 
         self.command_publisher
             .publish(RemoteControlDesktopCommand::EndSession { session_id })
+    }
+
+    async fn read_sillytavern_settings(&self, session_id: &str) -> Result<Vec<u8>, DomainError> {
+        if self.runtime.lock().await.session_id.as_deref() != Some(session_id) {
+            return Err(DomainError::AuthenticationError(
+                "Remote Control session is not active".to_string(),
+            ));
+        }
+        let settings = self
+            .settings_service
+            .get_sillytavern_settings()
+            .await
+            .map_err(|error| {
+                DomainError::InternalError(format!(
+                    "Failed to read SillyTavern settings for Remote Control: {error}"
+                ))
+            })?;
+        if settings.bytes.len() > REMOTE_CONTROL_MAX_SETTINGS_BYTES {
+            return Err(DomainError::InvalidData(
+                "SillyTavern settings exceed the Remote Control transfer limit".to_string(),
+            ));
+        }
+        Ok(settings.bytes.as_ref().clone())
     }
 
     async fn invoke_operation(
@@ -185,6 +215,10 @@ impl RemoteControlApi for RemoteControlService {
         })
     }
 
+    async fn get_sillytavern_settings(&self, session_id: &str) -> Result<Vec<u8>, DomainError> {
+        self.read_sillytavern_settings(session_id).await
+    }
+
     async fn invoke(
         &self,
         request: RemoteControlInvokeRequest,
@@ -234,7 +268,6 @@ fn result_size(result: &RemoteControlInvokeResult) -> Result<usize, DomainError>
                 .map_err(|error| DomainError::InvalidData(error.to_string()))?
                 .len())
         }
-        RemoteControlOutcome::Success(RemoteControlValue::BytesBase64(bytes)) => Ok(bytes.len()),
         RemoteControlOutcome::Failure(message) => Ok(message.len()),
     }
 }
@@ -259,9 +292,12 @@ mod tests {
     #[tokio::test]
     async fn invoke_waits_for_the_matching_desktop_response() {
         let (command_sender, mut command_receiver) = mpsc::unbounded_channel();
-        let service = Arc::new(RemoteControlService::new(Arc::new(RecordingPublisher {
-            commands: command_sender,
-        })));
+        let service = Arc::new(RemoteControlService::new(
+            Arc::new(RecordingPublisher {
+                commands: command_sender,
+            }),
+            super::super::settings_service::tests::remote_control_test_settings_service(),
+        ));
         let status = service.start_session().await.expect("start session");
         let session_id = status.session_id.expect("active session id");
 
@@ -308,11 +344,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn settings_bytes_are_available_only_during_the_remote_control_session() {
+        let (command_sender, _command_receiver) = mpsc::unbounded_channel();
+        let service = RemoteControlService::new(
+            Arc::new(RecordingPublisher {
+                commands: command_sender,
+            }),
+            super::super::settings_service::tests::remote_control_test_settings_service(),
+        );
+        let status = service.start_session().await.expect("start session");
+        let session_id = status.session_id.expect("active session id");
+
+        let bytes = service
+            .get_sillytavern_settings(&session_id)
+            .await
+            .expect("read computer settings");
+        let settings: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("settings response is JSON");
+        assert!(settings["settings"].is_string());
+
+        service.stop_session().await.expect("stop session");
+        assert!(service.get_sillytavern_settings(&session_id).await.is_err());
+    }
+
+    #[tokio::test]
     async fn oversized_response_fails_the_waiting_invoke_instead_of_leaking_it_until_timeout() {
         let (command_sender, mut command_receiver) = mpsc::unbounded_channel();
-        let service = Arc::new(RemoteControlService::new(Arc::new(RecordingPublisher {
-            commands: command_sender,
-        })));
+        let service = Arc::new(RemoteControlService::new(
+            Arc::new(RecordingPublisher {
+                commands: command_sender,
+            }),
+            super::super::settings_service::tests::remote_control_test_settings_service(),
+        ));
         let status = service.start_session().await.expect("start session");
         let session_id = status.session_id.expect("active session id");
 

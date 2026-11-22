@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use axum::{
     Json, Router,
+    body::Body,
     extract::{DefaultBodyLimit, State, rejection::JsonRejection},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header::CONTENT_TYPE},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -26,7 +27,7 @@ use tt_contracts::remote_chat::{
     RemoteChatChatsRequest, RemoteChatEventsRequest, RemoteChatHistoryRequest,
     RemoteChatSessionRequest, RemoteChatStopRequest, RemoteChatSubmitRequest,
 };
-use tt_contracts::remote_control::RemoteControlInvokeRequest;
+use tt_contracts::remote_control::{RemoteControlInvokeRequest, RemoteControlSettingsRequest};
 use tt_contracts::sync::PAIRING_REJECTED_MESSAGE;
 use tt_contracts::sync::SyncOperationOptions;
 use tt_domain::errors::DomainError;
@@ -133,6 +134,10 @@ pub async fn spawn_lan_sync_server(
         .route(
             "/v2/remote-control/invoke",
             post(handle_remote_control_invoke),
+        )
+        .route(
+            "/v2/remote-control/settings",
+            post(handle_remote_control_settings),
         )
         .layer(DefaultBodyLimit::max(320 * 1024));
 
@@ -484,6 +489,28 @@ async fn handle_remote_control_invoke(
         .map_err(ApiError::from)
 }
 
+async fn handle_remote_control_settings(
+    State(state): State<Arc<LanServerState>>,
+    headers: HeaderMap,
+    Json(request): Json<RemoteControlSettingsRequest>,
+) -> Result<Response, ApiError> {
+    authenticate_remote_session(&state, &headers).await?;
+    let bytes = state
+        .remote_control
+        .get_sillytavern_settings(&request.session_id)
+        .await
+        .map_err(ApiError::from)?;
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, "application/json")
+        .body(Body::from(bytes))
+        .map_err(|error| {
+            ApiError::from(DomainError::InternalError(format!(
+                "Failed to build Remote Control settings response: {error}"
+            )))
+        })
+}
+
 #[derive(Debug)]
 struct ApiError {
     error: DomainError,
@@ -620,6 +647,15 @@ mod tests {
                 active: false,
                 session_id: None,
             })
+        }
+
+        async fn get_sillytavern_settings(
+            &self,
+            _session_id: &str,
+        ) -> Result<Vec<u8>, DomainError> {
+            Err(DomainError::Conflict(
+                "Remote Control is disabled in this test".to_string(),
+            ))
         }
 
         async fn invoke(
@@ -1002,6 +1038,22 @@ mod tests {
                 .expect("unauthenticated request");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
+        let response = client
+            .http()
+            .post(
+                client
+                    .endpoint_url("/v2/remote-control/settings")
+                    .expect("Remote Control settings URL"),
+            )
+            .json(
+                &tt_contracts::remote_control::RemoteControlSettingsRequest {
+                    session_id: "control-session".to_string(),
+                },
+            )
+            .send()
+            .await
+            .expect("unauthenticated settings request");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         handle.shutdown();
         let _ = tokio::fs::remove_dir_all(default_user_dir).await;

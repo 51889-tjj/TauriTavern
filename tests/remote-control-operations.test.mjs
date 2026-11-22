@@ -28,9 +28,10 @@ test('remote mobile invoke maps configuration commands and rejects everything el
     assert.equal(isLocalRemoteShellCommand('remote_control_client_invoke'), true);
 });
 
-test('remote mobile invoke restores byte responses for the existing frontend ABI', async () => {
+test('remote settings read uses the shell binary transport', async () => {
     const previousWindow = globalThis.window;
     let nativeCommand;
+    const bytes = Uint8Array.from([0, 1, 127, 255]);
     globalThis.window = {
         __TAURITAVERN_REMOTE_CONTROL__: {
             deviceId: 'desktop-1',
@@ -40,7 +41,7 @@ test('remote mobile invoke restores byte responses for the existing frontend ABI
             core: {
                 invoke: async (command, args) => {
                     nativeCommand = { command, args };
-                    return { kind: 'bytes_base64', value: 'AAF//w==' };
+                    return bytes;
                 },
             },
         },
@@ -48,9 +49,10 @@ test('remote mobile invoke restores byte responses for the existing frontend ABI
 
     try {
         const result = await invoke('get_sillytavern_settings');
-        assert.deepEqual(Array.from(result), [0, 1, 127, 255]);
-        assert.equal(nativeCommand.command, 'remote_control_client_invoke');
+        assert.equal(result, bytes);
+        assert.equal(nativeCommand.command, 'remote_control_client_get_sillytavern_settings');
         assert.equal(nativeCommand.args.deviceId, 'desktop-1');
+        assert.equal(nativeCommand.args.sessionId, 'control-session');
     } finally {
         if (previousWindow === undefined) {
             delete globalThis.window;

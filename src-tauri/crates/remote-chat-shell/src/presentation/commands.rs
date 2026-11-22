@@ -225,3 +225,17 @@ pub(crate) async fn remote_control_client_invoke(
         .await
         .map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub(crate) async fn remote_control_client_get_sillytavern_settings(
+    services: State<'_, Arc<ShellServices>>,
+    device_id: String,
+    session_id: String,
+) -> Result<tauri::ipc::Response, String> {
+    let bytes = services
+        .remote_control_client
+        .get_sillytavern_settings(&device_id, &session_id)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}

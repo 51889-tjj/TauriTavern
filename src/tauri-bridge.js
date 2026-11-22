@@ -38,15 +38,6 @@ function withTauriArgumentAliases(args) {
     return aliased;
 }
 
-function bytesFromBase64(base64) {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-        bytes[index] = binary.charCodeAt(index);
-    }
-    return bytes;
-}
-
 export const invoke = (...args) => {
     const remote = typeof window === 'undefined' ? null : window.__TAURITAVERN_REMOTE_CONTROL__;
     const [command, commandArgs, options] = args;
@@ -65,6 +56,12 @@ export const invoke = (...args) => {
         const normalizedArgs = args.length >= 2 && isPlainObject(commandArgs)
             ? withTauriArgumentAliases(commandArgs)
             : commandArgs;
+        if (command === 'get_sillytavern_settings') {
+            return fn('remote_control_client_get_sillytavern_settings', {
+                deviceId: remote.deviceId,
+                sessionId: remote.sessionId,
+            });
+        }
         const operation = toRemoteControlOperation(command, normalizedArgs, options);
         return fn('remote_control_client_invoke', {
             deviceId: remote.deviceId,
@@ -74,9 +71,6 @@ export const invoke = (...args) => {
         }).then(value => {
             if (value?.kind === 'json') {
                 return value.value;
-            }
-            if (value?.kind === 'bytes_base64' && typeof value.value === 'string') {
-                return bytesFromBase64(value.value);
             }
             throw new Error('Remote Control returned an invalid response');
         });

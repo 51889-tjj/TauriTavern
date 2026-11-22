@@ -266,6 +266,7 @@ pub(super) async fn build(
     ));
     let remote_control_service = Arc::new(RemoteControlService::new(
         adapters::remote_control_command_publisher(app_handle),
+        settings_service.clone(),
     ));
     let sync_services = sync::build(
         app_handle,
