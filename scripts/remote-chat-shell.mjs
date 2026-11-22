@@ -46,7 +46,11 @@ if (!webBuild && !webDev && args[0] !== 'ios') {
 const result = spawnSync(process.execPath, [command, ...commandArgs], {
     cwd: webBuild || webDev ? repoRoot : shellRoot,
     stdio: 'inherit',
-    env: process.env,
+    env: {
+        ...process.env,
+        TAURI_APP_PATH: shellRoot,
+        TAURI_FRONTEND_PATH: repoRoot,
+    },
 });
 
 if (result.error) {
