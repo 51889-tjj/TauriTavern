@@ -79,6 +79,11 @@ if (!webBuild && !webDev && args[0] === 'ios' && args[1] === 'init' && result.st
     const exports = [
         '          export TAURI_APP_PATH="${SRCROOT}/../.."',
         '          export TAURI_FRONTEND_PATH="${SRCROOT}/../../../../.."',
+        '          cd "$TAURI_APP_PATH" || exit 1',
+        '          if [ ! -f "$TAURI_APP_PATH/tauri.conf.json" ]; then',
+        '            echo "error: Remote Chat shell Tauri config not found at $TAURI_APP_PATH" >&2',
+        '            exit 1',
+        '          fi',
         '',
     ].join('\n');
     if (!project.slice(scriptStart, buildPhaseIndex).includes('export TAURI_APP_PATH=')) {
